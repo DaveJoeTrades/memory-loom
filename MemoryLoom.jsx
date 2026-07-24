@@ -1,133 +1,5 @@
-<!DOCTYPE html>
-<!--
-  MEMORY LOOM — standalone voice build
-  Run on this device (microphone needs a real address, not file://):
-    1) put this file in a folder, open a terminal there
-    2) python3 -m http.server 8080
-    3) open  http://localhost:8080/memory-loom-standalone.html  in Chrome
-    4) allow the microphone when asked; paste your Anthropic API key once
-  Phones / any device: host this one file (GitHub Pages or Netlify Drop) and open
-  the https URL - then "Add to Home Screen" makes it feel like an app.
-  Data lives in that browser's localStorage; recordings download to the device at capture.
--->
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="theme-color" content="#33534B" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-title" content="Memory Loom" />
-<title>Memory Loom</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
-<script>window.React||document.write('<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"><\/script>')</script>
-<script>window.React||document.write('<script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>')</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
-<script>window.ReactDOM||document.write('<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"><\/script>')</script>
-<script>window.ReactDOM||document.write('<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>')</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.4/babel.min.js"></script>
-<script>window.Babel||document.write('<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>')</script>
-<style>html,body,#root{margin:0;min-height:100%;background:#F1EEE4}</style>
-</head>
-<body>
-<noscript><div style="font-family:Georgia,serif;color:#7C3A44;padding:40px;text-align:center">Memory Loom needs JavaScript — this viewer has it turned off. Open the file in Chrome instead.</div></noscript>
-<div id="boot-hint" style="font-family:Georgia,serif;color:#75806F;padding:48px 24px;text-align:center;font-size:18px">Opening Memory Loom&#8230;</div>
-<script>
-setTimeout(function () {
-  if (window.__LOOM_STARTED) return;
-  var m = []; if (!window.React) m.push("React"); if (!window.ReactDOM) m.push("ReactDOM"); if (!window.Babel) m.push("Babel");
-  var h = document.getElementById("boot-hint");
-  if (h) h.textContent = m.length
-    ? "Could not load: " + m.join(", ") + ". A script CDN may be blocked on this network or viewer - try Chrome on another connection, or host the file (see README)."
-    : "Scripts loaded but the app did not start. Open the browser console (F12) for the error.";
-}, 7000);
-</script>
-<div id="root"></div>
-<script>
-// localStorage-backed shim matching the artifact's window.storage API
-if (!window.storage) {
-  window.storage = {
-    async get(k) { const v = localStorage.getItem("loom:" + k); return v == null ? null : { key: k, value: v }; },
-    async set(k, v) { localStorage.setItem("loom:" + k, v); return { key: k, value: v }; },
-    async delete(k) { localStorage.removeItem("loom:" + k); return { key: k, deleted: true }; },
-    async list() { return { keys: [] }; }
-  };
-}
-</script>
-<script>
-// ---- standalone extras: audio vault (IndexedDB) + ElevenLabs voice hook + settings gear ----
-(function(){
-  function idb(){return new Promise(function(res,rej){var r=indexedDB.open('loom-audio',1);r.onupgradeneeded=function(){r.result.createObjectStore('clips')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)};});}
-  window.__audioSave=function(id,blobs){idb().then(function(d){var tx=d.transaction('clips','readwrite'),s=tx.objectStore('clips');s.put(blobs.length,id+'#n');blobs.forEach(function(bl,i){s.put(bl,id+'#'+i)});}).catch(function(){});};
-  function getOne(d,k){return new Promise(function(res){var q=d.transaction('clips').objectStore('clips').get(k);q.onsuccess=function(){res(q.result==null?null:q.result)};q.onerror=function(){res(null)};});}
-  var curA=null;
-  window.__audioStop=function(){try{if(curA){curA.pause();curA=null;}}catch(e){}};
-  window.__audioPlay=async function(id){try{var d=await idb();var n=await getOne(d,id+'#n');if(!n)return false;for(var i=0;i<n;i++){var bl=await getOne(d,id+'#'+i);if(!bl)continue;await new Promise(function(res){curA=new Audio(URL.createObjectURL(bl));curA.onended=res;curA.onerror=res;curA.play().catch(res);});}curA=null;return true;}catch(e){return false;}};
-  window.__blobPut=async function(key,blob){try{var d=await idb();return new Promise(function(res){var tx=d.transaction('clips','readwrite');tx.objectStore('clips').put(blob,key);tx.oncomplete=function(){res(true)};tx.onerror=function(){res(false)};});}catch(e){return false;}};
-  window.__blobGet=async function(key){try{var d=await idb();return await getOne(d,key);}catch(e){return null;}};
-  var urlCache={};
-  window.__photoUrl=async function(key){try{if(urlCache[key])return urlCache[key];var b=await window.__blobGet(key);if(!b)return null;var u=URL.createObjectURL(b);urlCache[key]=u;return u;}catch(e){return null;}};
-  window.__vaultClear=async function(){try{var d=await idb();return new Promise(function(res){var tx=d.transaction('clips','readwrite');tx.objectStore('clips').clear();tx.oncomplete=function(){urlCache={};res(true)};tx.onerror=function(){res(false)};});}catch(e){return false;}};
-  var curEl=null;
-  window.__stopSpeakHook=function(){try{if(curEl){curEl.pause();curEl=null;}}catch(e){}};
-  window.__speakHook=async function(text){
-    var k=null,v=null;try{k=localStorage.getItem('loom-eleven-key');v=localStorage.getItem('loom-eleven-voice');}catch(e){}
-    if(!k||!v)return false;
-    try{
-      var r=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(v),{method:'POST',headers:{'xi-api-key':k,'Content-Type':'application/json'},body:JSON.stringify({text:text,model_id:'eleven_multilingual_v2'})});
-      if(!r.ok)return false;
-      var bl=await r.blob();window.__stopSpeakHook();
-      await new Promise(function(res){curEl=new Audio(URL.createObjectURL(bl));curEl.onended=res;curEl.onerror=res;curEl.play().catch(res);});
-      curEl=null;return true;
-    }catch(e){return false;}
-  };
-  function gear(){
-    var btn=document.createElement('button');btn.textContent='⚙︎';btn.title='Voice settings';
-    btn.style.cssText='position:fixed;right:14px;bottom:14px;z-index:9999;width:40px;height:40px;border-radius:50%;border:1px solid #DDD6C4;background:#FBF9F2;color:#75806F;font-size:17px;cursor:pointer;';
-    btn.onclick=function(){
-      var ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:rgba(35,43,38,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
-      var c=document.createElement('div');c.style.cssText='background:#FBF9F2;border-radius:14px;max-width:420px;width:100%;padding:22px;font-family:Georgia,serif;color:#232B26;';
-      c.innerHTML='<h3 style="margin:0 0 6px;font-size:20px;">Your voice (ElevenLabs)</h3><p style="font-size:13.5px;color:#75806F;margin:0 0 14px;line-height:1.5;">Paste an ElevenLabs API key and a Voice ID and the questions will be spoken in that cloned voice. Leave blank to use the built-in voice. Stored only in this browser.</p>'
-        +'<label style="font-size:12px;color:#75806F;">ElevenLabs API key</label><input id="lv-k" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 10px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">'
-        +'<label style="font-size:12px;color:#75806F;">Voice ID</label><input id="lv-v" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 14px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">'
-        +'<div style="display:flex;gap:10px;justify-content:flex-end;"><button id="lv-c" style="padding:9px 14px;border-radius:8px;border:1px solid #DDD6C4;background:#F1EEE4;cursor:pointer;">Close</button><button id="lv-s" style="padding:9px 16px;border-radius:8px;border:0;background:#33534B;color:#FBF9F2;cursor:pointer;">Save</button></div>';
-      ov.appendChild(c);document.body.appendChild(ov);
-      try{c.querySelector('#lv-k').value=localStorage.getItem('loom-eleven-key')||'';c.querySelector('#lv-v').value=localStorage.getItem('loom-eleven-voice')||'';}catch(e){}
-      c.querySelector('#lv-c').onclick=function(){ov.remove();};
-      ov.addEventListener('click',function(ev){if(ev.target===ov)ov.remove();});
-      c.querySelector('#lv-s').onclick=function(){try{localStorage.setItem('loom-eleven-key',c.querySelector('#lv-k').value.trim());localStorage.setItem('loom-eleven-voice',c.querySelector('#lv-v').value.trim());}catch(e){}ov.remove();};
-    };
-    document.body.appendChild(btn);
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',gear);else gear();
-})();
-</script>
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useCallback } = React;
-// ---- inline SVG icons (lucide-style shims) ----
-function _Ic({ size = 20, color = "currentColor", fill = "none", style, children, ...p }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} {...p}>{children}</svg>;
-}
-const Mic = p => <_Ic {...p}><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z" /><path d="M19 10a7 7 0 0 1-14 0" /><line x1="12" y1="19" x2="12" y2="22" /></_Ic>;
-const Square = p => <_Ic {...p}><rect x="5" y="5" width="14" height="14" rx="2" /></_Ic>;
-const ChevronRight = p => <_Ic {...p}><polyline points="9 6 15 12 9 18" /></_Ic>;
-const GitBranch = p => <_Ic {...p}><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="5" r="2" /><path d="M6 7v10" /><path d="M18 7a7 7 0 0 1-7 7H8" /></_Ic>;
-const Volume2 = p => <_Ic {...p}><polygon points="4 9 8 9 13 5 13 19 8 15 4 15" /><path d="M16 9a4 4 0 0 1 0 6" /><path d="M18.5 6.5a8 8 0 0 1 0 11" /></_Ic>;
-const VolumeX = p => <_Ic {...p}><polygon points="4 9 8 9 13 5 13 19 8 15 4 15" /><line x1="17" y1="9" x2="22" y2="14" /><line x1="22" y1="9" x2="17" y2="14" /></_Ic>;
-const PenLine = p => <_Ic {...p}><path d="M3 21h6L20 10l-6-6L3 15v6z" /><path d="M14 4l6 6" /></_Ic>;
-const Download = p => <_Ic {...p}><path d="M12 3v12" /><polyline points="7 10 12 15 17 10" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></_Ic>;
-const Check = p => <_Ic {...p}><polyline points="4 12 10 18 20 6" /></_Ic>;
-const X = p => <_Ic {...p}><line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" /></_Ic>;
-const Users = p => <_Ic {...p}><circle cx="9" cy="8" r="3" /><path d="M3 21v-1a6 6 0 0 1 12 0v1" /><circle cx="17.5" cy="9" r="2.5" /><path d="M16 21v-.5a5 5 0 0 1 5.5-5" /></_Ic>;
-const MapPin = p => <_Ic {...p}><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z" /><circle cx="12" cy="10" r="2.5" /></_Ic>;
-const CalendarDays = p => <_Ic {...p}><rect x="3" y="5" width="18" height="16" rx="2" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="16" y1="3" x2="16" y2="7" /></_Ic>;
-const Package = p => <_Ic {...p}><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path d="M4 7.5l8 4.5 8-4.5" /><line x1="12" y1="12" x2="12" y2="21" /></_Ic>;
-const Sparkles = p => <_Ic {...p}><path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8L12 3z" /><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" /></_Ic>;
-const MessageCircle = p => <_Ic {...p}><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.6 0-3.1-.4-4.4-1.2L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z" /></_Ic>;
-const RefreshCw = p => <_Ic {...p}><polyline points="21 4 21 10 15 10" /><path d="M20.5 13a8 8 0 1 1-2-6.6" /></_Ic>;
-const BookOpen = p => <_Ic {...p}><path d="M2 5h7a3 3 0 0 1 3 3v12a3 3 0 0 0-3-3H2z" /><path d="M22 5h-7a3 3 0 0 0-3 3v12a3 3 0 0 1 3-3h7z" /></_Ic>;
-const Clock = p => <_Ic {...p}><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></_Ic>;
-const Pencil = p => <_Ic {...p}><path d="M14 4l6 6L8 22H2v-6L14 4z" /></_Ic>;
-const AlertTriangle = p => <_Ic {...p}><path d="M12 3l10 18H2L12 3z" /><line x1="12" y1="10" x2="12" y2="14" /><circle cx="12" cy="17.4" r="0.6" /></_Ic>;
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Mic, Square, ChevronRight, GitBranch, Volume2, VolumeX, PenLine, Download, Check, X, Users, MapPin, CalendarDays, Package, Sparkles, MessageCircle, RefreshCw, BookOpen, Clock, Pencil, AlertTriangle } from "lucide-react";
 
 /* ============================================================
    MEMORY LOOM — capture + structured memory graph (prototype)
@@ -607,16 +479,11 @@ function stopSpeak() {
 const ACKS = ["Lovely.", "Wonderful.", "That's a keeper.", "Thank you for that."];
 // ================= CLAUDE API =================
 async function callClaude(userContent) {
-  const apiKey = (() => { try { return localStorage.getItem("loom-api-key") || ""; } catch (e) { return ""; } })();
-  if (!apiKey) return null;
   const ctl = new AbortController();
   const to = setTimeout(() => ctl.abort(), 60000);
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      signal: ctl.signal,
+      method: "POST", headers: { "Content-Type": "application/json" }, signal: ctl.signal,
       body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: userContent }] })
     });
     const data = await res.json();
@@ -2378,7 +2245,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
 }
 
 // ================= APP ROOT =================
-function MemoryLoom() {
+export default function MemoryLoom() {
   const [graph, setGraph] = useState(null);
   const [index, setIndex] = useState(null);
   const [journal, setJournal] = useState(null);
@@ -2486,41 +2353,3 @@ function MemoryLoom() {
     </div>
   );
 }
-
-// ================= STANDALONE ONLY: API key gate + mount =================
-function KeyGate({ onSave }) {
-  const [k, setK] = useState("");
-  return (
-    <div style={{ minHeight: "100vh", background: T.paper, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ maxWidth: 480, width: "100%" }}>
-        <div style={{ width: 74, height: 74, borderRadius: "50%", border: `3px solid ${T.brass}`, margin: "0 auto 22px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.serif, fontSize: 30, color: T.ledger }}>ML</div>
-        <h1 style={{ fontFamily: T.serif, fontSize: 34, color: T.ink, textAlign: "center", margin: "0 0 10px" }}>One key to begin.</h1>
-        <p style={{ fontFamily: T.sans, fontSize: 15, color: T.faded, lineHeight: 1.55, textAlign: "center", margin: "0 0 20px" }}>
-          This standalone app talks to Claude with your own Anthropic API key
-          (console.anthropic.com &#8594; API keys). It is stored only in this browser
-          on this device, and each story costs a few cents against your key.
-        </p>
-        <input value={k} onChange={e => setK(e.target.value)} placeholder="sk-ant-…" spellCheck={false}
-          style={{ width: "100%", fontFamily: T.mono, fontSize: 15, padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.line}`, background: T.card, color: T.ink, boxSizing: "border-box" }} />
-        <div style={{ marginTop: 14, textAlign: "center" }}>
-          <Btn onClick={() => { try { localStorage.setItem("loom-api-key", k.trim()); } catch (e) {} onSave(k.trim()); }} disabled={!k.trim().startsWith("sk-")}>Save on this device <ChevronRight size={18} /></Btn>
-        </div>
-        <p style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded, textAlign: "center", marginTop: 16 }}>
-          To change it later: clear the key from this page&#39;s browser storage (loom-api-key) and reload.
-        </p>
-      </div>
-    </div>
-  );
-}
-function Root() {
-  const [key, setKey] = useState(() => { try { return localStorage.getItem("loom-api-key") || ""; } catch (e) { return ""; } });
-  if (!key) return <><style>{CSS}</style><KeyGate onSave={setKey} /></>;
-  return <MemoryLoom />;
-}
-window.__LOOM_STARTED = true;
-const _bh = document.getElementById("boot-hint"); if (_bh) _bh.remove();
-ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
-
-</script>
-</body>
-</html>
