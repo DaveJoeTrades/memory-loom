@@ -70,6 +70,21 @@ if (!window.storage) {
   window.__audioGet=async function(id){try{var d=await idb();var n=await getOne(d,id+'#n');if(!n)return null;var out=[];for(var i=0;i<n;i++){var b=await getOne(d,id+'#'+i);if(b)out.push(b);}return out.length?out:null;}catch(e){return null;}};
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
   window.__voicePref=function(lang){try{return localStorage.getItem('loom-voice-'+lang)||'';}catch(e){return '';}};
+  window.__scribe=async function(blob,lang){
+    var k=null;try{k=localStorage.getItem('loom-scribe-key')||localStorage.getItem('loom-eleven-key');}catch(e){}
+    if(!k)return null;
+    try{
+      var fd=new FormData();
+      fd.append('file',blob,'audio.webm');
+      fd.append('model_id','scribe_v2');
+      // No language_code: let Scribe detect what was actually spoken, so switching languages mid-session works.
+      var r=await fetch('https://api.elevenlabs.io/v1/speech-to-text',{method:'POST',headers:{'xi-api-key':k},body:fd});
+      if(!r.ok)return null;
+      var j=await r.json();
+      if(!j||!j.text)return null;
+      return {text:j.text,lang:(j.language_code||'').slice(0,2)==='zh'?'zh':((j.language_code||'').slice(0,2)||null)};
+    }catch(e){return null;}
+  };
   var curEl=null;
   window.__stopSpeakHook=function(){try{if(curEl){curEl.pause();curEl=null;}}catch(e){}};
   window.__speakHook=async function(text){
@@ -91,17 +106,20 @@ if (!window.storage) {
       var c=document.createElement('div');c.style.cssText='background:#FBF9F2;border-radius:14px;max-width:420px;width:100%;padding:22px;font-family:Georgia,serif;color:#232B26;';
       c.innerHTML='<h3 style="margin:0 0 6px;font-size:20px;">Your voice (ElevenLabs)</h3><p style="font-size:13.5px;color:#75806F;margin:0 0 14px;line-height:1.5;">Paste an ElevenLabs API key and a Voice ID and the questions will be spoken in that cloned voice. Leave blank to use the built-in voice. Stored only in this browser.</p>'
         +'<label style="font-size:12px;color:#75806F;">ElevenLabs API key</label><input id="lv-k" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 10px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">'
-        +'<label style="font-size:12px;color:#75806F;">Voice ID</label><input id="lv-v" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 14px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">'
-        +'<h3 style="margin:14px 0 6px;font-size:17px;">Built-in voice</h3><label style="font-size:12px;color:#75806F;">English voice</label><select id="lv-en" style="width:100%;box-sizing:border-box;margin:4px 0 10px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;"></select>'
-        +'<label style="font-size:12px;color:#75806F;">中文声音</label><select id="lv-zh" style="width:100%;box-sizing:border-box;margin:4px 0 14px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;"></select>'
+        +'<label style="font-size:12px;color:#75806F;">Voice ID</label><input id="lv-v" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 14px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">
+        +'<label style="font-size:12px;color:#75806F;">Speech-to-Text key (optional, sharper transcripts)</label><input id="lv-stt" type="password" autocomplete="off" placeholder="blank = use your voice key" style="width:100%;box-sizing:border-box;margin:4px 0 14px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">' '
+        +'<h3 style="margin:14px 0 6px;font-size:17px;">Built-in voice</h3><label style="font-size:12px;color:#75806F;">English voice</label><div style="display:flex;gap:6px;margin:4px 0 10px;"><select id="lv-en" style="flex:1;box-sizing:border-box;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;"></select><button id="lv-en-p" type="button" style="padding:0 12px;border:1px solid #DDD6C4;border-radius:8px;background:#F1EEE4;cursor:pointer;font-size:15px;">&#9654;</button></div>'
+        +'<label style="font-size:12px;color:#75806F;">中文声音</label><div style="display:flex;gap:6px;margin:4px 0 14px;"><select id="lv-zh" style="flex:1;box-sizing:border-box;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;"></select><button id="lv-zh-p" type="button" style="padding:0 12px;border:1px solid #DDD6C4;border-radius:8px;background:#F1EEE4;cursor:pointer;font-size:15px;">&#9654;</button></div>'
         +'<div style="display:flex;gap:10px;justify-content:flex-end;"><button id="lv-c" style="padding:9px 14px;border-radius:8px;border:1px solid #DDD6C4;background:#F1EEE4;cursor:pointer;">Close</button><button id="lv-s" style="padding:9px 16px;border-radius:8px;border:0;background:#33534B;color:#FBF9F2;cursor:pointer;">Save</button></div>';
       ov.appendChild(c);document.body.appendChild(ov);
-      try{c.querySelector('#lv-k').value=localStorage.getItem('loom-eleven-key')||'';c.querySelector('#lv-v').value=localStorage.getItem('loom-eleven-voice')||'';}catch(e){}
+      try{c.querySelector('#lv-k').value=localStorage.getItem('loom-eleven-key')||'';c.querySelector('#lv-v').value=localStorage.getItem('loom-eleven-voice')||'';c.querySelector('#lv-stt').value=localStorage.getItem('loom-scribe-key')||'';}catch(e){}
       c.querySelector('#lv-c').onclick=function(){ov.remove();};
       ov.addEventListener('click',function(ev){if(ev.target===ov)ov.remove();});
-      function fillVoices(){try{var vs=window.speechSynthesis?window.speechSynthesis.getVoices():[];var mk=function(sel,filt,key){var el=c.querySelector(sel);el.innerHTML='<option value="">(automatic)</option>';var cur='';try{cur=localStorage.getItem(key)||''}catch(e){}vs.filter(filt).forEach(function(v){var o=document.createElement('option');o.value=v.name;o.textContent=v.name+' ('+v.lang+')';if(v.name===cur)o.selected=true;el.appendChild(o);});};mk('#lv-en',function(v){return /^en/i.test(v.lang)},'loom-voice-en');mk('#lv-zh',function(v){return /zh|cmn/i.test(v.lang)},'loom-voice-zh');}catch(e){}}
+      function preview(sel,lng){try{var nm=c.querySelector(sel).value;var vs=window.speechSynthesis.getVoices()||[];var v=vs.find(function(x){return x.name===nm});var u=new SpeechSynthesisUtterance(lng==='zh'?'你好，这是我的声音。':'Hello, this is my voice.');if(v){u.voice=v;}if(lng==='zh')u.lang='zh-CN';try{window.speechSynthesis.cancel();window.speechSynthesis.resume();}catch(e){}window.speechSynthesis.speak(u);}catch(e){}}
+      function fillVoices(){try{var vs=window.speechSynthesis?window.speechSynthesis.getVoices():[];var mk=function(sel,filt,key){var el=c.querySelector(sel);el.innerHTML='<option value="">(use my system voice)</option>';var cur='';try{cur=localStorage.getItem(key)||''}catch(e){}var local={};vs.filter(filt).forEach(function(v){var lbl=v.name+' ('+v.lang+')';if(local[lbl])return;local[lbl]=1;var o=document.createElement('option');o.value=v.name;o.textContent=lbl;if(v.name===cur)o.selected=true;el.appendChild(o);});};mk('#lv-en',function(v){return /^en/i.test(v.lang)},'loom-voice-en');mk('#lv-zh',function(v){return /zh|cmn/i.test(v.lang)},'loom-voice-zh');}catch(e){}}
+      c.querySelector('#lv-en-p').onclick=function(){preview('#lv-en','en')};c.querySelector('#lv-zh-p').onclick=function(){preview('#lv-zh','zh')};
       fillVoices();try{window.speechSynthesis&&(window.speechSynthesis.onvoiceschanged=fillVoices);}catch(e){}
-      c.querySelector('#lv-s').onclick=function(){try{localStorage.setItem('loom-eleven-key',c.querySelector('#lv-k').value.trim());localStorage.setItem('loom-eleven-voice',c.querySelector('#lv-v').value.trim());localStorage.setItem('loom-voice-en',c.querySelector('#lv-en').value);localStorage.setItem('loom-voice-zh',c.querySelector('#lv-zh').value);}catch(e){}ov.remove();var u=new SpeechSynthesisUtterance(' ');try{window.speechSynthesis.speak(u);}catch(e){}};
+      c.querySelector('#lv-s').onclick=function(){try{localStorage.setItem('loom-eleven-key',c.querySelector('#lv-k').value.trim());localStorage.setItem('loom-eleven-voice',c.querySelector('#lv-v').value.trim());localStorage.setItem('loom-voice-en',c.querySelector('#lv-en').value);localStorage.setItem('loom-voice-zh',c.querySelector('#lv-zh').value);localStorage.setItem('loom-scribe-key',c.querySelector('#lv-stt').value.trim());}catch(e){}ov.remove();var u=new SpeechSynthesisUtterance(' ');try{window.speechSynthesis.speak(u);}catch(e){}};
     };
     document.body.appendChild(btn);
   }
@@ -593,6 +611,61 @@ function completeness({ people, askedIds, bank, chapters }) {
     gaps: computeGaps({ people: ppl, askedIds: asked, bank: bk, chapters: chapters })
   };
 }
+
+// ---- Cross-root relation composition (v2.0): map another device's tree onto ours ----
+function normRelWord(r) {
+  const s = (r || "").toLowerCase().trim();
+  if (/\b(mother|mom|mum|mama|ma)\b/.test(s)) return "mother";
+  if (/\b(father|dad|papa|pa)\b/.test(s)) return "father";
+  if (/\bparent\b/.test(s)) return "parent";
+  if (/\b(wife|husband|spouse|partner)\b/.test(s)) return "spouse";
+  if (/\bbrother\b/.test(s)) return "brother";
+  if (/\bsister\b/.test(s)) return "sister";
+  if (/\bsibling\b/.test(s)) return "sibling";
+  if (/\bson\b/.test(s)) return "son";
+  if (/\bdaughter\b/.test(s)) return "daughter";
+  if (/\b(child|children)\b/.test(s)) return "child";
+  if (/\bgrandmother\b|\bgrandma\b/.test(s)) return "grandmother";
+  if (/\bgrandfather\b|\bgrandpa\b/.test(s)) return "grandfather";
+  if (/\bgrandson\b/.test(s)) return "grandson";
+  if (/\bgranddaughter\b/.test(s)) return "granddaughter";
+  if (/\bgrandchild\b/.test(s)) return "grandchild";
+  return s;
+}
+// COMPOSE[B's relation to ME][P's relation to B] = P's relation to ME. Absent = unknown (goes unplaced for review).
+const COMPOSE = {
+  spouse: { mother: "mother-in-law", father: "father-in-law", parent: "parent-in-law", child: "child", son: "son", daughter: "daughter",
+            grandchild: "grandchild", grandson: "grandson", granddaughter: "granddaughter", brother: "brother-in-law", sister: "sister-in-law", sibling: "sibling-in-law" },
+  child:  { child: "grandchild", son: "grandson", daughter: "granddaughter", sibling: "child", brother: "son", sister: "daughter", spouse: "child-in-law" },
+  son:    { child: "grandchild", son: "grandson", daughter: "granddaughter", sibling: "child", brother: "son", sister: "daughter", spouse: "daughter-in-law" },
+  daughter: { child: "grandchild", son: "grandson", daughter: "granddaughter", sibling: "child", brother: "son", sister: "daughter", spouse: "son-in-law" },
+  sibling: { mother: "mother", father: "father", parent: "parent", grandmother: "grandmother", grandfather: "grandfather",
+             child: "nephew-or-niece", son: "nephew", daughter: "niece", sibling: "sibling", brother: "brother", sister: "sister" },
+  brother: { mother: "mother", father: "father", parent: "parent", grandmother: "grandmother", grandfather: "grandfather",
+             child: "nephew-or-niece", son: "nephew", daughter: "niece", sibling: "sibling", brother: "brother", sister: "sister" },
+  sister:  { mother: "mother", father: "father", parent: "parent", grandmother: "grandmother", grandfather: "grandfather",
+             child: "nephew-or-niece", son: "nephew", daughter: "niece", sibling: "sibling", brother: "brother", sister: "sister" },
+  mother: { mother: "grandmother", father: "grandfather", parent: "grandparent", sibling: "aunt-or-uncle", brother: "uncle", sister: "aunt", child: "sibling" },
+  father: { mother: "grandmother", father: "grandfather", parent: "grandparent", sibling: "aunt-or-uncle", brother: "uncle", sister: "aunt", child: "sibling" },
+  parent: { mother: "grandmother", father: "grandfather", parent: "grandparent", sibling: "aunt-or-uncle", brother: "uncle", sister: "aunt", child: "sibling" },
+  grandchild: { child: "great-grandchild", son: "great-grandchild", daughter: "great-grandchild" },
+  grandson:   { child: "great-grandchild", son: "great-grandchild", daughter: "great-grandchild" },
+  granddaughter: { child: "great-grandchild", son: "great-grandchild", daughter: "great-grandchild" }
+};
+function composeRel(bRelToMe, pRelToB) {
+  const b = normRelWord(bRelToMe), p = normRelWord(pRelToB);
+  if (!b || !p) return null;
+  const row = COMPOSE[b];
+  if (!row) return null;
+  return row[p] || null;
+}
+// ---- Verbosity nudge: has the storyteller said enough to be worth a gentle "tell me more"? ----
+function needsMore(text, minWords) {
+  const n = String(text || "").trim().split(/\s+/).filter(Boolean).length;
+  const cjk = (String(text || "").match(/[\u4e00-\u9fff]/g) || []).length;
+  const effective = cjk > n ? Math.round(cjk / 2) : n;   // Chinese has no spaces; ~2 chars per "word"
+  return effective > 0 && effective < (minWords || 25);
+}
 // ================= END TESTED LOGIC =================
 // ================= STORAGE (window.storage with in-memory fallback) =================
 const GRAPH_KEY = "loom-graph-v1", INDEX_KEY = "loom-index-v1", JOURNAL_KEY = "loom-journal-v1";
@@ -620,7 +693,7 @@ function emptyGraph() {
     settings: { storyteller: "", speakers: [], currentSpeakerId: "", rootSpeakerId: "", lang: "en", pin: "", keepJournalAudio: true, autoDownloadAudio: false }, stats: { stories: 0, minutes: 0 } };
 }
 function emptyIndex() { return { storyIds: [], meta: {} }; }
-function emptyJournal() { return { entries: [], facts: [] }; }
+function emptyJournal() { return { entries: [], facts: [], drafts: {} }; }
 function isoToday() { return new Date().toISOString().slice(0, 10); }
 
 
@@ -638,29 +711,50 @@ function pickVoice(lang) {
     try {
       if (window.__voicePref) {
         const want = window.__voicePref(lang === "zh" ? "zh" : "en");
-        if (want) { const hit = vs.find(v => v.name === want); if (hit) return hit; }
+        if (want) {
+          const hit = vs.find(v => v.name === want);
+          if (hit && (lang !== "zh" || /zh|cmn/i.test(hit.lang))) return hit;
+        }
       }
     } catch (e) {}
     if (lang === "zh") {
-      return vs.find(v => /zh|cmn/i.test(v.lang) && /Tingting|Google|Meijia|Sinji/i.test(v.name)) || vs.find(v => /zh|cmn/i.test(v.lang)) || null;
+      // Chinese still needs an explicit match: leaving it to the engine often yields an English voice.
+      return vs.find(v => /zh|cmn/i.test(v.lang) && v.default) || vs.find(v => /zh|cmn/i.test(v.lang)) || null;
     }
-    return vs.find(v => /^en/i.test(v.lang) && /Samantha|Karen|Serena|Moira|Google US English|Google UK English Female/i.test(v.name))
-      || vs.find(v => /^en/i.test(v.lang)) || null;
+    // "Automatic" means the system/browser default — never override the voice the person chose in their OS.
+    const sysDefault = vs.find(v => v.default);
+    if (sysDefault) return sysDefault;
+    return null;
   } catch (e) { return null; }
 }
 function browserSpeak(text, opts) {
   try {
     const synth = window.speechSynthesis;
+    const wantZh = opts && opts.lang === "zh";
     const u = new SpeechSynthesisUtterance(text);
-    const v = pickVoice(opts && opts.lang); if (v) u.voice = v;
-    if (opts && opts.lang === "zh") u.lang = "zh-CN";
+    // Language must be set first; only apply a stored voice if it MATCHES the language,
+    // otherwise an English voice would force English pronunciation of Chinese text.
+    if (wantZh) u.lang = "zh-CN";
+    const v = pickVoice(opts && opts.lang);
+    if (v && (!wantZh || /zh|cmn/i.test(v.lang))) u.voice = v;
     u.rate = (opts && opts.rate) || 0.95; u.pitch = 1;
-    if (synth.speaking || synth.pending) synth.cancel();
-    setTimeout(() => { try { synth.speak(u); } catch (e) {} }, 60);
+    try { synth.cancel(); } catch (e) {}
+    // Chrome/Safari sometimes leave synth in a paused state after cancel(); resume unsticks it.
+    try { synth.resume(); } catch (e) {}
+    const go = () => { try { synth.speak(u); } catch (e) {} };
+    // A tiny delay lets cancel() settle, but too long drops it on iOS; 0 works best post-resume.
+    setTimeout(go, 0);
   } catch (e) {}
+}
+function detectTextLang(text) {
+  const t = String(text || "");
+  const cjk = (t.match(/[\u4e00-\u9fff]/g) || []).length;
+  return cjk >= 2 ? "zh" : null;
 }
 function speak(text, opts) {
   if (!text) return;
+  const auto = detectTextLang(text);
+  if (auto) opts = Object.assign({}, opts || {}, { lang: auto });
   (async () => {
     try { if (window.__speakHook && await window.__speakHook(text)) return; } catch (e) {}
     if (ttsSupported()) browserSpeak(text, opts);
@@ -900,11 +994,13 @@ function applyExtraction(graph, data, storyId, sp) {
   }
   return graph;
 }
-function mergeImportedGraph(graph, imp) {
+function mergeImportedGraph(graph, imp, opts) {
+  const rootRel = opts && opts.rootRel;
   const rootLocal = ((graph.settings && graph.settings.speakers) || []).find(x => x.id === (graph.settings && graph.settings.rootSpeakerId));
   const rootImp = ((imp.settings && imp.settings.speakers) || []).find(x => x.id === (imp.settings && imp.settings.rootSpeakerId));
   if (!rootLocal || !rootImp) return { ok: false, reason: "missing-root" };
-  if (rootLocal.name.trim().toLowerCase() !== rootImp.name.trim().toLowerCase()) return { ok: false, reason: "root-mismatch", a: rootLocal.name, b: rootImp.name };
+  const sameRoot = rootLocal.name.trim().toLowerCase() === rootImp.name.trim().toLowerCase();
+  if (!sameRoot && !rootRel) return { ok: false, reason: "root-mismatch", a: rootLocal.name, b: rootImp.name };
   const spMap = {};
   for (const sp of (imp.settings.speakers || [])) {
     const hit = (graph.settings.speakers || []).find(x => x.name.trim().toLowerCase() === sp.name.trim().toLowerCase());
@@ -913,7 +1009,7 @@ function mergeImportedGraph(graph, imp) {
   }
   const idMap = {};
   const lists = ["people", "places", "events", "objects", "sensory"];
-  let merged = 0, added = 0;
+  let merged = 0, added = 0, unmapped = 0;
   for (const ln of lists) {
     for (const e of (imp[ln] || [])) {
       const hit = (graph[ln] || []).find(x => x.name && e.name && x.name.trim().toLowerCase() === e.name.trim().toLowerCase());
@@ -921,9 +1017,27 @@ function mergeImportedGraph(graph, imp) {
       else {
         const nid2 = nid(graph, ln === "people" ? "p" : ln.slice(0, 2));
         idMap[e.id] = nid2;
-        graph[ln].push(Object.assign({}, e, { id: nid2, speakerId: e.speakerId ? (spMap[e.speakerId] || null) : (e.speakerId || null) }));
+        const copy = Object.assign({}, e, { id: nid2, speakerId: e.speakerId ? (spMap[e.speakerId] || null) : (e.speakerId || null) });
+        if (ln === "people" && !sameRoot) {
+          const mapped = composeRel(rootRel, e.rel);
+          if (mapped) copy.rel = mapped;
+          else {
+            copy.rel = "";
+            copy.notes = ((copy.notes || "") + " [from " + rootImp.name + "'s ledger: their " + (e.rel || "relation unclear") + "]").trim();
+            unmapped++;
+          }
+        }
+        graph[ln].push(copy);
         added++;
       }
+    }
+  }
+  if (!sameRoot) {
+    const exists = (graph.people || []).some(p => p.name && p.name.trim().toLowerCase() === rootImp.name.trim().toLowerCase());
+    if (!exists) {
+      graph.people.push({ id: nid(graph, "p"), name: rootImp.name, rel: rootRel, details: [], firsthand: true, conf: 1,
+        provenance: [{ storyId: null, quote: "joined from another device's ledger", sp: rootImp.name }], notes: "" });
+      added++;
     }
   }
   let kinAdded = 0;
@@ -943,7 +1057,7 @@ function mergeImportedGraph(graph, imp) {
     for (const q of imp.askedBySpeaker[sid]) if (!arr.includes(q)) arr.push(q);
   }
   for (const sid in (imp.spStats || {})) { const lid = spMap[sid] || sid; graph.spStats = graph.spStats || {}; graph.spStats[lid] = Math.max(graph.spStats[lid] || 0, imp.spStats[sid] || 0); }
-  return { ok: true, merged, added, kinAdded, spMap };
+  return { ok: true, merged, added, kinAdded, unmapped, spMap, sameRoot };
 }
 function mergePair(graph, listName, keepId, dropId) {
   const list = graph[listName];
@@ -1006,8 +1120,16 @@ function useRecorder(opts) {
         mrRef.current = mr;
       } catch (e) { mrRef.current = null; }
     } catch (e) {
-      setSupport(s => ({ ...s, mic: false, micReason: s.micReason || "denied" }));
-      return false;
+      // Fallback: if a shared stream went stale, try a direct request once before giving up.
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        LOOM_STREAM = stream; streamRef.current = stream;
+        setSupport(s => ({ ...s, mic: true }));
+        try { const mr = new MediaRecorder(stream); mr.ondataavailable = e => { if (e.data && e.data.size) chunksRef.current.push(e.data); }; mr.start(1000); mrRef.current = mr; } catch (e3) { mrRef.current = null; }
+      } catch (e2) {
+        setSupport(s => ({ ...s, mic: false, micReason: s.micReason || "denied" }));
+        return false;
+      }
     }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR) {
@@ -1269,22 +1391,22 @@ function StorytellerView({ graph, mutateGraph, setIndexPersist, runExtraction, g
           <div style={{ width: 96, height: 96, borderRadius: "50%", background: T.brass, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.serif, fontSize: 38, color: T.card, marginBottom: 20 }}>
             {(callItem.fromName || "?").slice(0, 1).toUpperCase()}
           </div>
-          <p style={{ fontFamily: T.sans, fontSize: 15, color: T.brassSoft, margin: 0, letterSpacing: "0.14em", textTransform: "uppercase" }}>{lang === "zh" ? "\u6765\u7535" : "Calling"}</p>
-          <h2 style={{ fontFamily: T.serif, fontSize: 34, color: T.card, margin: "8px 0 30px" }}>{callItem.fromName || (lang === "zh" ? "\u5bb6\u4eba" : "family")}</h2>
+          <p style={{ fontFamily: T.sans, fontSize: 15, color: T.brassSoft, margin: 0, letterSpacing: "0.14em", textTransform: "uppercase" }}>{lang === "zh" ? "来电" : "Calling"}</p>
+          <h2 style={{ fontFamily: T.serif, fontSize: 34, color: T.card, margin: "8px 0 30px" }}>{callItem.fromName || (lang === "zh" ? "家人" : "family")}</h2>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
             <Btn variant="brass" style={{ fontSize: 19, padding: "16px 26px" }}
               onClick={() => { primeTts(); const it = callItem; setCallItem(null); setForcedInboxId(it.id); setSubMode("stories"); }}>
-              <Mic size={20} /> {lang === "zh" ? "\u63a5\u542c" : "Answer"}
+              <Mic size={20} /> {lang === "zh" ? "接听" : "Answer"}
             </Btn>
             <Btn variant="ghost" style={{ fontSize: 17, padding: "14px 20px", color: T.brassSoft }} onClick={() => setCallItem(null)}>
-              {lang === "zh" ? "\u4e0d\u63a5" : "Not now"}
+              {lang === "zh" ? "不接" : "Not now"}
             </Btn>
           </div>
         </div>
       ) : null}
       <TtsToggle on={tts} setOn={setTts} />
       <div style={{ position: "absolute", top: 14, right: 14, display: "flex", gap: 6 }}>
-        {[["en", "EN"], ["zh", "\u4e2d\u6587"]].map(([code, label]) => (
+        {[["en", "EN"], ["zh", "中文"]].map(([code, label]) => (
           <button key={code} onClick={() => { primeTts(); mutateGraph(g => { g.settings.lang = code; }); }}
             style={{ fontFamily: T.sans, fontSize: 13, padding: "6px 12px", borderRadius: 99, cursor: "pointer",
               border: `1.5px solid ${lang === code ? T.ledger : T.line}`,
@@ -1296,7 +1418,7 @@ function StorytellerView({ graph, mutateGraph, setIndexPersist, runExtraction, g
           display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.serif, fontSize: 30, color: T.ledger }}>ML</div>
         <Eyebrow>Memory Loom</Eyebrow>
         <h1 style={{ fontFamily: T.serif, fontSize: "clamp(30px, 8vw, 44px)", margin: "0 0 14px", color: T.ink }}>
-          {firstName ? (lang === "zh" ? firstName + "\uff0c\u4f60\u597d\u3002" : "Hello, " + firstName + ".") : (lang === "zh" ? "\u8bb2\u4e2a\u6545\u4e8b\u7ed9\u6211\u542c\u3002" : "Tell me a story.")}
+          {firstName ? (lang === "zh" ? firstName + "，你好。" : "Hello, " + firstName + ".") : (lang === "zh" ? "讲个故事给我听。" : "Tell me a story.")}
         </h1>
         {speakers.length === 0 ? (
           <div style={{ maxWidth: 360, margin: "0 auto" }}>
@@ -1314,12 +1436,12 @@ function StorytellerView({ graph, mutateGraph, setIndexPersist, runExtraction, g
                     border: `2px solid ${s.id === (speaker && speaker.id) ? T.ledger : T.line}`,
                     background: s.id === (speaker && speaker.id) ? T.ledger : T.card,
                     color: s.id === (speaker && speaker.id) ? T.card : T.ink }}>
-                  {s.name}{graph.settings.rootSpeakerId === s.id ? " \u2605" : ""}
+                  {s.name}{graph.settings.rootSpeakerId === s.id ? " ★" : ""}
                 </button>
               ))}
               {adding && relPick ? (
                 <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center", maxWidth: 420 }}>
-                  <span style={{ fontFamily: T.sans, fontSize: 13, color: T.faded, width: "100%" }}>How is {nameDraft.trim()} related to \u2605?</span>
+                  <span style={{ fontFamily: T.sans, fontSize: 13, color: T.faded, width: "100%" }}>How is {nameDraft.trim()} related to ★?</span>
                   {[["Spouse", "spouse"], ["Child", "child"], ["Grandchild", "grandchild"], ["Sibling", "sibling"], ["Parent", "parent"], ["Niece/Nephew", "niece"], ["Friend", "friend"], ["Other", ""]].map(([lbl, rv]) => (
                     <Chip key={lbl} tone="brass" onClick={() => commitSpeaker(rv)} style={{ padding: "7px 12px", fontSize: 13 }}>{lbl}</Chip>
                   ))}
@@ -1337,7 +1459,7 @@ function StorytellerView({ graph, mutateGraph, setIndexPersist, runExtraction, g
             <p style={{ fontFamily: T.sans, fontSize: 13, color: T.faded, margin: "0 0 22px" }}>&#9733; marks whose family tree we grow around.</p>
             {rec.support.mic === false && (
               <p style={{ fontFamily: T.sans, fontSize: 13.5, color: T.berry, margin: "0 0 12px" }}>
-                {lang === "zh" ? "\u8fd9\u4e2a\u7a97\u53e3\u7528\u4e0d\u4e86\u9ea6\u514b\u98ce\u2014\u2014\u4f60\u53ef\u4ee5\u7528\u6253\u5b57\u7684\u65b9\u5f0f\u8bb2\u6545\u4e8b\u3002" : "No microphone in this window \u2014 you can tell stories by typing instead."}
+                {lang === "zh" ? "这个窗口用不了麦克风——你可以用打字的方式讲故事。" : "No microphone in this window — you can tell stories by typing instead."}
               </p>
             )}
             {(
@@ -1348,7 +1470,7 @@ function StorytellerView({ graph, mutateGraph, setIndexPersist, runExtraction, g
               </div>
             )}
             {rec.support.mic !== false &&
-              <p style={{ fontFamily: T.sans, fontSize: 13.5, color: T.faded, marginTop: 22 }}>{lang === "zh" ? "\u5168\u90fd\u7528\u8bf4\u7684\u2014\u2014\u6309\u4e00\u4e0b\u5c31\u5f00\u8bb2\uff0c\u5c31\u50cf\u5728\u996d\u684c\u8fb9\u804a\u5929\u3002" : "Everything is spoken \u2014 press the key and talk, like at the kitchen table."}</p>}
+              <p style={{ fontFamily: T.sans, fontSize: 13.5, color: T.faded, marginTop: 22 }}>{lang === "zh" ? "全都用说的——按一下就开讲，就像在饭桌边聊天。" : "Everything is spoken — press the key and talk, like at the kitchen table."}</p>}
           </>
         )}
       </div>
@@ -1369,6 +1491,8 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
   const [repair, setRepair] = useState("");
   const [editing, setEditing] = useState(false);
   const [silentS, setSilentS] = useState(false);
+  const [editNote, setEditNote] = useState("");
+  const [sttBusy, setSttBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [audioNote, setAudioNote] = useState("");
   const [ackIdx, setAckIdx] = useState(0);
@@ -1411,7 +1535,7 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
     : (current.q[lang] || current.q.en || current.q.text)) : "";
   const qChapter = current ? (current.type === "inbox" ? (current.item.photoId ? t.photoQ : t.fromFamily + " " + (current.item.fromName || "")) :
     current.type === "gentle" ? t.woven :
-    current.q.chapter === "kin" ? t.treeEyebrow : (lang === "zh" ? "\u7ae0\u8282\uff1a" : "from the chapter: ") + (current.q.chapter || "open")) : "";
+    current.q.chapter === "kin" ? t.treeEyebrow : (lang === "zh" ? "章节：" : "from the chapter: ") + (current.q.chapter || "open")) : "";
 
   useEffect(() => {
     if (phase === "question" && current && current.type === "inbox" && current.item.voice && typeof window !== "undefined" && window.__audioPlay) {
@@ -1497,21 +1621,44 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
     else setA2(prev => (prev + " " + text).trim());
     if (!heard && !prior) { setSilentS(true); setPhase(stage === 1 ? "question" : "followup"); return; }
     setSilentS(false); setPhase("review");
+    // Optional high-accuracy re-transcription (ElevenLabs Scribe) — replaces the browser text if it succeeds.
+    if (blob && typeof window !== "undefined" && window.__scribe) {
+      setSttBusy(true);
+      try {
+        const res = await window.__scribe(blob, lang);
+        const better = res && (typeof res === "string" ? res : res.text);
+        if (better && better.trim()) {
+          if (stage === 1) setA1(better.trim()); else setA2(better.trim());
+          const spoken = res && res.lang;
+          if (spoken && spoken !== lang && (spoken === "zh" || spoken === "en")) {
+            mutateGraph(g => { g.settings.lang = spoken; });
+          }
+        }
+      } catch (e) {}
+      setSttBusy(false);
+    }
   }
   async function resumeTalking() { stopSpeak(); const ok = await rec.start(); if (ok) setPhase("live"); }
   async function startVoiceEdit() { stopSpeak(); const ok = await rec.start(); if (ok) setPhase("editLive"); }
   async function stopVoiceEdit() {
-    const { text } = await rec.stop();
-    if (!text.trim()) { setPhase("review"); return; }
+    const { text, heard } = await rec.stop();
+    if (!heard || !text.trim()) { setEditNote(lang === "zh" ? "没听清，再说一次修改。" : "I didn't catch that — say the change again."); setPhase("review"); return; }
     setPhase("revising");
-    const revised = await reviseTranscript(currentAnswer, text);
-    setCurrentAnswer(revised);
+    try {
+      const revised = await reviseTranscript(currentAnswer, text);
+      if (revised && revised.trim() && revised.trim() !== currentAnswer.trim()) {
+        if (stage === 1) setA1(revised); else setA2(revised);
+        setEditNote("");
+      } else {
+        setEditNote(lang === "zh" ? "没改动——可以再说得具体些。" : "No change made — try saying it more specifically.");
+      }
+    } catch (e) { setEditNote(lang === "zh" ? "改动没成功。" : "That change didn't go through."); }
     setPhase("review");
   }
   async function toFollowUp() {
     if (!a1.trim()) { saveStory(); return; }
     setPhase("fuLoading");
-    const q = await askFollowUp(qText, a1);
+    const q = await askFollowUp(qText, a1 + (needsMore(a1) ? "\n(Note for you: that answer was brief — your question should invite them to open it up with one easy, concrete detail.)" : ""));
     if (!q) { saveStory(); return; }
     setFollowQ(q); setStage(2); setPhase("followup");
   }
@@ -1530,10 +1677,10 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
     });
     setAudioNote(blobsRef.current.length
       ? (vaulted
-        ? (lang === "zh" ? "\u5f55\u97f3\u5df2\u5b58\u5165\u8fd9\u53f0\u8bbe\u5907\u7684\u58f0\u97f3\u5e93\u3002" : "The recording is safe in this device\u2019s audio vault.")
+        ? (lang === "zh" ? "录音已存入这台设备的声音库。" : "The recording is safe in this device’s audio vault.")
         : (audioSaved
-          ? (lang === "zh" ? "\u5f55\u97f3\u5df2\u4e0b\u8f7d\u5230\u8fd9\u53f0\u8bbe\u5907\u3002" : "The recording downloaded to this device \u2014 keep that file safe.")
-          : (lang === "zh" ? "\u5f55\u97f3\u672a\u80fd\u4fdd\u5b58\u3002" : "The recording could not be saved automatically.")))
+          ? (lang === "zh" ? "录音已下载到这台设备。" : "The recording downloaded to this device — keep that file safe.")
+          : (lang === "zh" ? "录音未能保存。" : "The recording could not be saved automatically.")))
       : "");
     const story = { id, question: qText, chapter: current.type === "gentle" ? "gentle" : current.type === "inbox" ? "family-asked" : current.type === "free" ? "own-telling" : current.type === "gap" ? "kin" : (current.q.chapter || "open"),
       bankId: current.type === "bank" ? current.q.id : null,
@@ -1565,7 +1712,7 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
     const ack = ackArr[ackIdx % ackArr.length]; setAckIdx(i => i + 1);
     const elapsed = Date.now() - sessRef.current.startAt;
     const wrap = sessionShouldWrap(elapsed);
-    say(wrap ? (lang === "zh" ? "\u8bb2\u5f97\u771f\u597d\u3002\u5341\u4e8c\u5206\u949f\u7684\u6545\u4e8b\uff0c\u90fd\u7a33\u7a33\u5b58\u597d\u4e86\u3002" : "That was wonderful. Twelve minutes of stories, safe and sound.") : ack + " " + t.filed);
+    say(wrap ? (lang === "zh" ? "讲得真好。十二分钟的故事，都稳稳存好了。" : "That was wonderful. Twelve minutes of stories, safe and sound.") : ack + " " + t.filed);
     setPhase(wrap ? "wrap" : "saved");
   }
 
@@ -1605,7 +1752,8 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
               <>
                 <TalkKey liveMode={false} onClick={() => { setSilentS(false); startTalking(); }} />
                 <p style={{ fontFamily: T.sans, fontSize: 18, color: silentS ? T.berry : T.faded, marginTop: 16 }}>
-                {silentS ? (lang === "zh" ? "\u6162\u6162\u6765\uff0c\u518d\u6309\u4e00\u4e0b\u5c31\u597d\u3002" : "Take your time \u2014 press again when you\u2019re ready.") : t.press}
+                {silentS ? (lang === "zh" ? "慢慢来，再按一下就好。" : "Take your time — press again when you’re ready.")
+                  : (lang === "zh" ? t.press + "——想到什么就说什么，越细越好。" : t.press + " — say as much as you like; the long way round is best.")}
               </p>
               </>
             )}
@@ -1632,7 +1780,7 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
 
         {phase === "review" && (
           <div>
-            <Eyebrow>{stage === 2 ? (lang === "zh" ? "\u8865\u5145\u7684\u90e8\u5206" : "The extra detail") : t.heard}</Eyebrow>
+            <Eyebrow>{stage === 2 ? (lang === "zh" ? "补充的部分" : "The extra detail") : t.heard}</Eyebrow>
             {currentAnswer.trim() ? (
               editing ? (
                 <textarea value={currentAnswer} onChange={e => setCurrentAnswer(e.target.value)} rows={7}
@@ -1657,6 +1805,13 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
               {rec.support.mic !== false && <Btn variant="brass" onClick={resumeTalking}><Mic size={16} /> {t.addMore}</Btn>}
               {currentAnswer.trim() && <Btn variant="ghost" onClick={() => setEditing(e => !e)}>{editing ? t.doneFix : t.fixWord}</Btn>}
               {currentAnswer.trim() && !editing && rec.support.mic !== false && <Btn variant="ghost" onClick={startVoiceEdit}><Mic size={14} /> {t.changeVoice}</Btn>}
+              {editNote && <p style={{ width: "100%", fontFamily: T.sans, fontSize: 13.5, color: T.berry, margin: "4px 0 0" }}>{editNote}</p>}
+              {sttBusy && <p style={{ width: "100%", fontFamily: T.sans, fontSize: 13, color: T.faded, margin: "4px 0 0" }}>{lang === "zh" ? "正在把话听得更准…" : "Sharpening the words…"}</p>}
+              {!sttBusy && currentAnswer.trim() && needsMore(currentAnswer) && (
+                <p style={{ width: "100%", fontFamily: T.serif, fontSize: 15.5, color: T.faded, margin: "6px 0 0", fontStyle: "italic" }}>
+                  {lang === "zh" ? "还想再多说几句吗？细节最珍贵。" : "Is there more you'd like to add? The small details are the treasure."}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1770,13 +1925,15 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
   const convoRef = useRef({ start: 0, cnt: 0 });
   const sessFURef = useRef(0);
   const pT = p => p ? (p[lang] || p.en || p) : "";
-  const [phase, setPhase] = useState("boot");
+  const draftKey = "draft:" + speaker.id + ":" + today;
+  const savedDraft = (journal.drafts && journal.drafts[draftKey]) || null;
+  const [phase, setPhase] = useState(savedDraft ? (savedDraft.phase || "boot") : "boot");
   const [recallList, setRecallList] = useState([]);
   const [rIdx, setRIdx] = useState(0);
   const [gradeSay, setGradeSay] = useState("");
   const [prompts] = useState(() => pickJournalPrompts(Math.floor(Date.now() / 86400000)));
-  const [pIdx, setPIdx] = useState(0);
-  const [answers, setAnswers] = useState([]);
+  const [pIdx, setPIdx] = useState(savedDraft ? (savedDraft.pIdx || 0) : 0);
+  const [answers, setAnswers] = useState(savedDraft ? (savedDraft.answers || []) : []);
   const [streak, setStreak] = useState(1);
   const today = isoToday();
 
@@ -1790,7 +1947,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
   }, [phase]);
 
   useEffect(() => {
-    if (phase === "recallQ" && recallList[rIdx]) say((lang === "zh" ? "\u6765\u770b\u770b\u4f60\u8fd8\u8bb0\u5f97\u5417\u3002" : "Let me see what you remember. ") + recallList[rIdx].q);
+    if (phase === "recallQ" && recallList[rIdx]) say((lang === "zh" ? "来看看你还记得吗。" : "Let me see what you remember. ") + recallList[rIdx].q);
     if (phase === "promptQ" && prompts[pIdx]) say(pT(prompts[pIdx]));
     if (phase === "recallSay" && gradeSay) say(gradeSay);
   }, [phase, rIdx, pIdx, gradeSay]);
@@ -1804,7 +1961,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
       const f = j.facts.find(x => x.id === fact.id);
       if (f) { f.askedCount = (f.askedCount || 0) + 1; f.lastAsked = today; f.results = f.results || []; f.results.push({ date: today, gotIt: g.gotIt }); }
     });
-    setGradeSay(g.say || ((lang === "zh" ? "\u6211\u8bb0\u7740\u7684\u662f\uff1a" : "I have it noted as: ") + fact.a + (lang === "zh" ? "\u3002" : ".")));
+    setGradeSay(g.say || ((lang === "zh" ? "我记着的是：" : "I have it noted as: ") + fact.a + (lang === "zh" ? "。" : ".")));
     setPhase("recallSay");
   }
   async function stopRecall() {
@@ -1865,6 +2022,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
     setSilent(false); processPrompt(text);
   }
   async function finish(finalAnswers) {
+    mutateJournal(j => { if (j.drafts) delete j.drafts[draftKey]; });
     setPhase("saving");
     const combined = finalAnswers.map(x => "Q: " + x.q + "\nA: " + x.a).join("\n");
     const parsed = await extractJournalFacts(combined);
@@ -1885,7 +2043,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
     });
     setPhase("jdone");
   }
-  useEffect(() => { if (phase === "jdone") say(lang === "zh" ? "\u90fd\u8bb0\u4e0b\u4e86\u3002\u5c0f\u8bb0\u5df2\u7ecf\u8fde\u7740\u5199\u4e86 " + streak + " \u5929\u3002" : "All noted. That's " + streak + (streak === 1 ? " day" : " days") + " of journals running."); }, [phase]);
+  useEffect(() => { if (phase === "jdone") say(lang === "zh" ? "都记下了。小记已经连着写了 " + streak + " 天。" : "All noted. That's " + streak + (streak === 1 ? " day" : " days") + " of journals running."); }, [phase]);
 
   const bigQ = phase === "recallQ" ? (recallList[rIdx] || {}).q : phase === "promptQ" ? pT(prompts[pIdx]) : phase === "fuQ" ? fuQ : "";
   const endRef = useRef(null);
@@ -1897,6 +2055,12 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
     : phase === "promptQ" || phase === "promptLive" ? pT(prompts[pIdx]) : "";
   if (pendingQ && (!chatMsgs.length || chatMsgs[chatMsgs.length - 1].text !== pendingQ)) chatMsgs.push({ who: "app", text: pendingQ });
   useEffect(() => { try { if (endRef.current && endRef.current.scrollIntoView) endRef.current.scrollIntoView({ behavior: "smooth", block: "end" }); } catch (e) {} }, [chatMsgs.length, phase]);
+  useEffect(() => {
+    const active = phase === "promptQ" || phase === "fuQ" || phase === "promptLive" || phase === "fuLive";
+    if (active && answers.length) {
+      mutateJournal(j => { j.drafts = j.drafts || {}; j.drafts[draftKey] = { phase: "promptQ", pIdx, answers }; });
+    }
+  }, [answers.length, pIdx, phase]);
 
   return (
     <div className="loomScreen">
@@ -1941,11 +2105,14 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
                 <>
                   <TalkKey liveMode={false} onClick={() => { setSilent(false); startTalking(phase === "recallQ" ? "recallLive" : phase === "fuQ" ? "fuLive" : "promptLive"); }} />
                   <p style={{ fontFamily: T.sans, fontSize: 15, color: silent ? T.berry : T.faded, marginTop: 10 }}>
-                    {silent ? (lang === "zh" ? "\u6162\u6162\u6765\uff0c\u518d\u6309\u4e00\u4e0b\u5c31\u597d\u3002" : "Take your time \u2014 press again when you\u2019re ready.") : t.tellMe}
+                    {silent ? (lang === "zh" ? "慢慢来，再按一下就好。" : "Take your time — press again when you’re ready.") : t.tellMe}
                   </p>
                 </>
               )}
-              {phase === "recallQ" && <div style={{ marginTop: 12 }}><Btn variant="ghost" small onClick={nextAfterRecall}>{lang === "zh" ? "\u60f3\u4e0d\u8d77\u6765\u4e86\u2014\u2014\u4e0b\u4e00\u4e2a" : "It slips my mind \u2014 move on"}</Btn></div>}
+              {phase === "recallQ" && <div style={{ marginTop: 12 }}><Btn variant="ghost" small onClick={nextAfterRecall}>{lang === "zh" ? "想不起来了——下一个" : "It slips my mind — move on"}</Btn></div>}
+              {(phase === "promptQ" || phase === "fuQ") && answers.length > 0 && (
+                <div style={{ marginTop: 12 }}><Btn variant="ghost" small onClick={() => finish(answers)}>{lang === "zh" ? "今天就到这儿" : "That's enough for today"}</Btn></div>
+              )}
             </div>
           </div>
         )}
@@ -1963,7 +2130,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
         )}
         {phase === "jThink" && (
           <div style={{ textAlign: "center", fontFamily: T.serif, fontSize: 21, color: T.faded }}>
-            <RefreshCw size={22} style={{ verticalAlign: "-4px", marginRight: 8 }} /> {lang === "zh" ? "\u55ef\u2026\u2026" : "Hmm\u2026"}
+            <RefreshCw size={22} style={{ verticalAlign: "-4px", marginRight: 8 }} /> {lang === "zh" ? "嗯……" : "Hmm…"}
           </div>
         )}
         {phase === "saving" && (
@@ -1988,7 +2155,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
   );
 }
 let LOOM_LANG = "en";
-const FTZH = { "Review": "待核对", "People": "人物", "Places": "地点", "Moments": "时刻", "Family tree": "家谱", "Journal": "小记", "Ask": "提问", "Keepsakes": "念想", "Questions": "问题", "Stories": "故事", "Export": "导出", "MEMORY LOOM": "记忆织机", "Hand to storyteller": "交给讲述人", "Family ledger": "家庭档案", "Enter the PIN": "请输入密码", "Open": "打开", "A curtain for shared devices \\u2014 the storyteller side stays open.": "共用设备上的一道帘子——讲述人那边始终敞开。", "Ask a question": "提一个问题", "Queue question": "排入问题", "Record it in your voice": "用你的声音录下来", "Stop \\u2014 save voice question": "停——保存语音问题", "+ Photo to ask about": "+ 想问的照片", "Reading the photo\\u2026": "正在看照片……", "Queued & asked": "排队与已问", "remove": "删除", "queued": "排队中", "asked": "已问", "parked": "暂放", "voice": "语音", "story told": "故事已讲", "waiting to be asked": "等着被问起", "from the stories": "来自故事", "+ photo": "+ 照片", "No keepsakes yet. Add a photo in the Ask tab, or attach one to a mentioned object below.": "还没有念想。到“提问”里加一张照片，或给下面提到的物件配一张。", "Keepsake photos live on the device app (the deployed web version), not in this preview.": "念想照片保存在设备上的正式网页应用里，预览版看不到。", "Mentioned in stories \\u2014 add a photo to keep them": "故事里提到的——配上照片留下来", "It will be woven into their next story session on this device \\u2014 gently, one per sitting, always skippable.": "会在这台设备上、他们下次讲故事时轻轻带出——每次至多一个，随时可以跳过。", "One family, two devices": "一家人，两台设备", "Family archive (.json)": "家庭档案文件 (.json)", "Merge in a family archive\\u2026": "并入一份家庭档案……", "Merging requires the same \\u2605 root person on both devices; stories and entities dedupe by name, near-matches go to Review. Audio never travels in the JSON \\u2014 move it with the audio files.": "合并要求两台设备的★主角相同；故事与条目按名字去重，拿不准的进“待核对”。录音不随 JSON 走——请连同音频文件一起转移。", "That file is not a Memory Loom archive or ledger.": "这个文件不是记忆织机的档案或账本。", "Could not merge \\u2014 the archive has no \\u2605 root speaker.": "无法合并——档案里没有★主角。", "Could not read that file.": "无法读取这个文件。", "The whole ledger": "整本账本", "Erase the whole ledger…": "抹去整本账本……", "Keep everything": "全部保留", "Careful now": "当心", "This erases every story and entity. Downloaded files stay on the device.": "这会抹去所有故事和条目。已下载的文件仍留在设备上。", "Yes, erase": "是的，抹去", "Family ledger settings": "家庭档案设置", "PIN curtain:": "密码帘：", "Keep journal audio:": "保留小记录音：", "Keeps casual eyes off this ledger on a shared device. It is a curtain, not encryption.": "在共用设备上挡一挡随意的目光。是帘子，不是加密。", "Off by default \\u2014 the journal\\u2019s value is the recall practice, not the recording.": "小记的价值在回忆练习，不在录音本身。", "on": "开", "off": "关", "All audio files": "全部音频文件", "Ledger is saving to this device automatically.": "账本会自动保存在这台设备上。", "Persistent storage is unavailable — this session only. Export before closing.": "无法持久保存——仅本次会话有效。关闭前请先导出。", "No stories yet. Hand the other screen to your storyteller and begin.": "还没有故事。把另一个界面交给讲述人，开始吧。", "read": "读", "close": "收起", "In the ledger": "已入账", "Reading…": "读取中……", "Failed": "失败", "Words needed": "缺文字", "Reading failed": "读取失败", "Suggested from the stories": "从故事里想到的", "Ask them, gently": "轻轻问一问", "Ask first": "先问这个", "Park": "暂放", "Parked": "已暂放", "Set aside": "放一放", "Nothing suggested right now.": "眼下没有新的建议。", "Bring back": "取回", "How the ledger treats what it hears": "账本如何对待听到的话", "Placing someone here never involves the storyteller — it just tidies the ledger.": "在这里安放某人从不打扰讲述人——只是把账本理整齐。", "The storyteller": "讲述人", "Spouse": "配偶", "Brothers & sisters": "兄弟姐妹", "Parents": "父母", "Grandparents & earlier": "祖辈及更早", "Children": "子女", "Grandchildren": "孙辈", "Extended family": "亲族", "Not yet placed — where do they belong?": "尚未安放——他们属于哪里？", "No one in the tree yet. The family-tree questions will bring them in.": "家谱里还没有人。家谱问题会把他们带进来。", "No one in the ledger yet. People will appear here as stories are told.": "账本里还没有人。随着故事讲出，人会在这里出现。", "Places from the stories will gather here.": "故事里的地点会聚到这里。", "Moments — weddings, crossings, first days — will gather here.": "时刻——婚礼、远渡、头一天——会聚到这里。", "Connections heard in the stories": "故事里听到的关联", "When was this?": "这是什么时候？", "Save year": "保存年份", "About the time ": "大约在 ", "Leave as told": "照原话保留", "They&#39;re different": "不是同一个", "Rename": "改名", "Reword": "改写", "Save the words": "保存这些话", "Journals appear once someone starts their daily two minutes on the storyteller screen.": "当有人在讲述人界面开始每天两分钟，小记就会出现。", "No journal entries yet.": "还没有小记。", "Sensory details": "感官细节", "No safety copy yet.": "还没有安全备份。", "Make one": "做一份", "Search the ledger…": "搜索账本……", "Family note (photos and corrections live here for now)": "家人备注（照片与更正暂记于此）", "Type a question\\u2026 e.g. Ask about the summer in Qingdao": "输入一个问题……比如：问问青岛的那个夏天", "Your name (shown as: A question from \\u2026)": "你的名字（显示为：来自……的问题）", "empty = off": "留空＝关闭", "year": "年份", "no audio": "无录音", "This device is the only home of these stories.": "这台设备是这些故事唯一的家。", "days old": "天前" , "Download graph + stories (.json)": "下载账本＋故事 (.json)", "Read again": "重新读取", "Transcript": "文字稿", "Try again": "再试一次", "Weave it in": "织进去", "Yes, erase": "是的，抹去", "What is still missing": "还缺什么", "Life story": "人生故事", "most important": "最要紧", "important": "要紧", "later": "以后", "Ask this next": "下次问这个", "Nothing obvious is missing \u2014 the tree and the chapters are filling in.": "暂时没有明显的空白——家谱和篇章都在填上。", "Ask in your own voice": "用你自己的声音问", "Record any of the life questions once, and it will be your voice asking it \u2014 not the app\u2019s.": "把任意一个问题录一次，以后就是你的声音在问，而不是机器。", "Search the questions\u2026": "搜索问题……", "Record": "录音", "Redo": "重录", "Stop": "停", "Export voice samples": "导出声音样本", "recorded \u2014 upload these to ElevenLabs to clone this voice": "段已录——可上传到 ElevenLabs 克隆这个声音"};
+const FTZH = { "Review": "待核对", "People": "人物", "Places": "地点", "Moments": "时刻", "Family tree": "家谱", "Journal": "小记", "Ask": "提问", "Keepsakes": "念想", "Questions": "问题", "Stories": "故事", "Export": "导出", "MEMORY LOOM": "记忆织机", "Hand to storyteller": "交给讲述人", "Family ledger": "家庭档案", "Enter the PIN": "请输入密码", "Open": "打开", "A curtain for shared devices — the storyteller side stays open.": "共用设备上的一道帘子——讲述人那边始终敞开。", "Ask a question": "提一个问题", "Queue question": "排入问题", "Record it in your voice": "用你的声音录下来", "Stop — save voice question": "停——保存语音问题", "+ Photo to ask about": "+ 想问的照片", "Reading the photo…": "正在看照片……", "Queued & asked": "排队与已问", "remove": "删除", "queued": "排队中", "asked": "已问", "parked": "暂放", "voice": "语音", "story told": "故事已讲", "waiting to be asked": "等着被问起", "from the stories": "来自故事", "+ photo": "+ 照片", "No keepsakes yet. Add a photo in the Ask tab, or attach one to a mentioned object below.": "还没有念想。到“提问”里加一张照片，或给下面提到的物件配一张。", "Keepsake photos live on the device app (the deployed web version), not in this preview.": "念想照片保存在设备上的正式网页应用里，预览版看不到。", "Mentioned in stories — add a photo to keep them": "故事里提到的——配上照片留下来", "It will be woven into their next story session on this device — gently, one per sitting, always skippable.": "会在这台设备上、他们下次讲故事时轻轻带出——每次至多一个，随时可以跳过。", "One family, two devices": "一家人，两台设备", "Family archive (.json)": "家庭档案文件 (.json)", "Merge in a family archive…": "并入一份家庭档案……", "Merging requires the same ★ root person on both devices; stories and entities dedupe by name, near-matches go to Review. Audio never travels in the JSON — move it with the audio files.": "合并要求两台设备的★主角相同；故事与条目按名字去重，拿不准的进“待核对”。录音不随 JSON 走——请连同音频文件一起转移。", "That file is not a Memory Loom archive or ledger.": "这个文件不是记忆织机的档案或账本。", "Could not merge — the archive has no ★ root speaker.": "无法合并——档案里没有★主角。", "Could not read that file.": "无法读取这个文件。", "The whole ledger": "整本账本", "Erase the whole ledger…": "抹去整本账本……", "Keep everything": "全部保留", "Careful now": "当心", "This erases every story and entity. Downloaded files stay on the device.": "这会抹去所有故事和条目。已下载的文件仍留在设备上。", "Yes, erase": "是的，抹去", "Family ledger settings": "家庭档案设置", "PIN curtain:": "密码帘：", "Keep journal audio:": "保留小记录音：", "Keeps casual eyes off this ledger on a shared device. It is a curtain, not encryption.": "在共用设备上挡一挡随意的目光。是帘子，不是加密。", "Off by default — the journal’s value is the recall practice, not the recording.": "小记的价值在回忆练习，不在录音本身。", "on": "开", "off": "关", "All audio files": "全部音频文件", "Ledger is saving to this device automatically.": "账本会自动保存在这台设备上。", "Persistent storage is unavailable — this session only. Export before closing.": "无法持久保存——仅本次会话有效。关闭前请先导出。", "No stories yet. Hand the other screen to your storyteller and begin.": "还没有故事。把另一个界面交给讲述人，开始吧。", "read": "读", "close": "收起", "In the ledger": "已入账", "Reading…": "读取中……", "Failed": "失败", "Words needed": "缺文字", "Reading failed": "读取失败", "Suggested from the stories": "从故事里想到的", "Ask them, gently": "轻轻问一问", "Ask first": "先问这个", "Park": "暂放", "Parked": "已暂放", "Set aside": "放一放", "Nothing suggested right now.": "眼下没有新的建议。", "Bring back": "取回", "How the ledger treats what it hears": "账本如何对待听到的话", "Placing someone here never involves the storyteller — it just tidies the ledger.": "在这里安放某人从不打扰讲述人——只是把账本理整齐。", "The storyteller": "讲述人", "Spouse": "配偶", "Brothers & sisters": "兄弟姐妹", "Parents": "父母", "Grandparents & earlier": "祖辈及更早", "Children": "子女", "Grandchildren": "孙辈", "Extended family": "亲族", "Not yet placed — where do they belong?": "尚未安放——他们属于哪里？", "No one in the tree yet. The family-tree questions will bring them in.": "家谱里还没有人。家谱问题会把他们带进来。", "No one in the ledger yet. People will appear here as stories are told.": "账本里还没有人。随着故事讲出，人会在这里出现。", "Places from the stories will gather here.": "故事里的地点会聚到这里。", "Moments — weddings, crossings, first days — will gather here.": "时刻——婚礼、远渡、头一天——会聚到这里。", "Connections heard in the stories": "故事里听到的关联", "When was this?": "这是什么时候？", "Save year": "保存年份", "About the time ": "大约在 ", "Leave as told": "照原话保留", "They&#39;re different": "不是同一个", "Rename": "改名", "Reword": "改写", "Save the words": "保存这些话", "Journals appear once someone starts their daily two minutes on the storyteller screen.": "当有人在讲述人界面开始每天两分钟，小记就会出现。", "No journal entries yet.": "还没有小记。", "Sensory details": "感官细节", "No safety copy yet.": "还没有安全备份。", "Make one": "做一份", "Search the ledger…": "搜索账本……", "Family note (photos and corrections live here for now)": "家人备注（照片与更正暂记于此）", "Type a question… e.g. Ask about the summer in Qingdao": "输入一个问题……比如：问问青岛的那个夏天", "Your name (shown as: A question from …)": "你的名字（显示为：来自……的问题）", "empty = off": "留空＝关闭", "year": "年份", "no audio": "无录音", "This device is the only home of these stories.": "这台设备是这些故事唯一的家。", "days old": "天前" , "Download graph + stories (.json)": "下载账本＋故事 (.json)", "Read again": "重新读取", "Transcript": "文字稿", "Try again": "再试一次", "Weave it in": "织进去", "Yes, erase": "是的，抹去", "What is still missing": "还缺什么", "Life story": "人生故事", "most important": "最要紧", "important": "要紧", "later": "以后", "Ask this next": "下次问这个", "Nothing obvious is missing — the tree and the chapters are filling in.": "暂时没有明显的空白——家谱和篇章都在填上。", "Ask in your own voice": "用你自己的声音问", "Record any of the life questions once, and it will be your voice asking it — not the app’s.": "把任意一个问题录一次，以后就是你的声音在问，而不是机器。", "Search the questions…": "搜索问题……", "Record": "录音", "Redo": "重录", "Stop": "停", "Export voice samples": "导出声音样本", "recorded — upload these to ElevenLabs to clone this voice": "段已录——可上传到 ElevenLabs 克隆这个声音", "Who's asking? (optional)": "谁在问？（可选）", "Listen — no transcript": "请听录音——没有文字", "Locks next time the ledger is opened": "下次打开档案时生效", "Gathering the recordings…": "正在收集录音……", "No recordings on this device yet.": "这台设备上还没有录音。", "recordings — choose Save to Files": "段录音——请选择“存储到文件”", "Son": "儿子", "Daughter": "女儿", "Brother": "兄弟", "Sister": "姐妹", "Mother": "母亲", "Father": "父亲", "Grandson": "孙子", "Granddaughter": "孙女", "Cancel": "取消", "Merge cancelled.": "已取消合并。", "Relations we can work out are re-anchored to our own ★; anything uncertain waits in \"Not yet placed\" rather than being guessed.": "能推算的关系会换算到我们的★；拿不准的放进“尚未安放”，绝不瞎猜。"};
 function ft(s) { return (LOOM_LANG === "zh" && FTZH[s]) ? FTZH[s] : s; }
 function fileToScaledJpeg(file, maxDim) {
   return new Promise((resolve) => {
@@ -2023,7 +2190,7 @@ function PlayClip({ id }) {
     catch (e) { setSt("idle"); }
   }
   if (typeof window === "undefined" || !window.__audioPlay) return null;
-  return <Btn small variant="ghost" onClick={go}>{st === "playing" ? "\u25fc" : st === "none" ? ft("no audio") : "\u25b6"}</Btn>;
+  return <Btn small variant="ghost" onClick={go}>{st === "playing" ? "◼" : st === "none" ? ft("no audio") : "▶"}</Btn>;
 }
 // ================= FAMILY VIEW =================
 function findEnt(graph, id) {
@@ -2174,11 +2341,13 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
   LOOM_LANG = (graph.settings && graph.settings.lang) || "en";
   const [tab, setTab] = useState("review");
   const [search, setSearch] = useState("");
-  const [pinOk, setPinOk] = useState(false);
+  // Locked only if a PIN already existed when this ledger mounted; setting a PIN now does not lock you out mid-session.
+  const hadPinAtMountRef = useRef(!!(graph.settings && graph.settings.pin));
+  const [pinOk, setPinOk] = useState(!hadPinAtMountRef.current);
   const [pinTry, setPinTry] = useState("");
   const [askText, setAskText] = useState("");
   const [askFor, setAskFor] = useState(() => (graph.settings && (graph.settings.rootSpeakerId || graph.settings.currentSpeakerId)) || "");
-  const [fromName, setFromName] = useState("");
+  const [fromName, setFromName] = useState((graph.settings && graph.settings.lastAskerName) || "");
   const [askRec, setAskRec] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [vpRec, setVpRec] = useState(null);
@@ -2206,7 +2375,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
   async function submitTypedAsk() {
     const q = askText.trim(); if (!q || !askFor) return;
     const iid = uid();
-    mutateGraph(g => { g.inbox = g.inbox || []; g.inbox.push({ id: iid, forSpeakerId: askFor, fromName: fromName.trim() || "family", q: { en: q }, status: "queued", skips: 0, createdAt: Date.now() }); });
+    mutateGraph(g => { g.inbox = g.inbox || []; g.inbox.push({ id: iid, forSpeakerId: askFor, fromName: fromName.trim() || "family", q: { en: q }, status: "queued", skips: 0, createdAt: Date.now() }); if (fromName.trim()) g.settings.lastAskerName = fromName.trim(); });
     setAskText("");
   }
   async function startAskRec() { const ok = await recFam.start(); if (ok) setAskRec(true); }
@@ -2216,7 +2385,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
     const iid = uid();
     const hasAudio = !!(blob && typeof window !== "undefined" && window.__audioSave);
     if (hasAudio) { try { window.__audioSave("q:" + iid, [blob]); } catch (e) {} }
-    mutateGraph(g => { g.inbox = g.inbox || []; g.inbox.push({ id: iid, forSpeakerId: askFor, fromName: fromName.trim() || "family", q: { en: (text || "").trim() || "(a spoken question)" }, voice: hasAudio, status: "queued", skips: 0, createdAt: Date.now() }); });
+    mutateGraph(g => { g.inbox = g.inbox || []; g.inbox.push({ id: iid, forSpeakerId: askFor, fromName: fromName.trim() || "family", q: { en: (text || "").trim() || "(a spoken question)" }, voice: hasAudio, status: "queued", skips: 0, createdAt: Date.now() }); if (fromName.trim()) g.settings.lastAskerName = fromName.trim(); });
   }
   async function submitPhotoAsk(file) {
     if (!file || !askFor || typeof window === "undefined" || !window.__blobPut) return;
@@ -2229,7 +2398,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
       const qj = await photoQuestion(sc.b64, sc.mediaType);
       const iid = uid();
       mutateGraph(g => { g.inbox = g.inbox || []; g.inbox.push({ id: iid, forSpeakerId: askFor, fromName: fromName.trim() || "family",
-        q: qj || { en: "Tell me the story of this photo \u2014 who is in it, and when was it taken?", zh: "\u8bb2\u8bb2\u8fd9\u5f20\u7167\u7247\u7684\u6545\u4e8b\u2014\u2014\u7167\u7247\u91cc\u662f\u8c01\uff1f\u4ec0\u4e48\u65f6\u5019\u62cd\u7684\uff1f" },
+        q: qj || { en: "Tell me the story of this photo — who is in it, and when was it taken?", zh: "讲讲这张照片的故事——照片里是谁？什么时候拍的？" },
         photoId: pid, status: "queued", skips: 0, createdAt: Date.now() }); });
     } finally { setPhotoBusy(false); }
   }
@@ -2284,21 +2453,22 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
     mutateGraph(g => { g.settings.lastExportAt = Date.now(); });
   }
   const [mergeMsg, setMergeMsg] = useState("");
-  async function importArchive(file) {
+  const [pendingImport, setPendingImport] = useState(null);
+  async function importArchive(file, rootRel) {
     try {
-      const txt = await file.text();
+      const txt = typeof file === "string" ? file : await file.text();
       const data = JSON.parse(txt);
       const impGraph = data && data.kind === "memory-loom-archive" ? data.graph : (data && data.people ? data : null);
       const impStories = data && data.kind === "memory-loom-archive" ? (data.stories || []) : [];
       if (!impGraph) { setMergeMsg(ft("That file is not a Memory Loom archive or ledger.")); return; }
       let res = null;
-      mutateGraph(g => { res = mergeImportedGraph(g, impGraph); });
+      mutateGraph(g => { res = mergeImportedGraph(g, impGraph, rootRel ? { rootRel } : null); });
       if (!res || !res.ok) {
-        setMergeMsg(res && res.reason === "root-mismatch"
-          ? (LOOM_LANG === "zh" ? "★主角不同（" + res.a + " 与 " + res.b + "）。为保家谱准确，目前只合并同一主角的账本。" : "Different \u2605 roots (" + res.a + " vs " + res.b + "). To keep the tree true, only same-root ledgers merge for now.")
-          : "Could not merge \u2014 the archive has no \u2605 root speaker.");
+        if (res && res.reason === "root-mismatch") { setPendingImport({ txt, a: res.a, b: res.b }); setMergeMsg(""); return; }
+        setMergeMsg(ft("Could not merge — the archive has no ★ root speaker."));
         return;
       }
+      setPendingImport(null);
       let newStories = 0;
       for (const st of impStories) {
         if (!st || !st.id || index.storyIds.includes(st.id)) continue;
@@ -2314,22 +2484,37 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
         newStories++;
       }
       mutateGraph(g => { g.stats.stories = Math.max(g.stats.stories, (index.storyIds.length + newStories)); });
-      setMergeMsg(LOOM_LANG === "zh"
+      const unmappedNote = res.unmapped
+        ? (LOOM_LANG === "zh" ? " 有 " + res.unmapped + " 位关系无法换算，已放入“尚未安放”待你指认。" : " " + res.unmapped + " people couldn't be re-anchored automatically — they're waiting in \"Not yet placed\".")
+        : "";
+      setMergeMsg((LOOM_LANG === "zh"
         ? "已合并：新故事 " + newStories + "，新条目 " + res.added + "，按名字归并 " + res.merged + "，亲属关联 " + res.kinAdded + "。录音仍在原设备上。"
-        : "Merged: " + newStories + " new stories, " + res.added + " new entries, " + res.merged + " matched by name, " + res.kinAdded + " kin links. Audio stays on its original device.");
+        : "Merged: " + newStories + " new stories, " + res.added + " new entries, " + res.merged + " matched by name, " + res.kinAdded + " kin links. Audio stays on its original device.") + unmappedNote);
     } catch (e) { setMergeMsg(ft("Could not read that file.")); }
   }
+  const [audioMsg, setAudioMsg] = useState("");
   async function downloadAllAudio() {
     if (typeof window === "undefined" || !window.__audioGet) return;
+    setAudioMsg(ft("Gathering the recordings…"));
+    const files = [];
     for (const id of index.storyIds) {
       try {
         const blobs = await window.__audioGet(id);
         if (blobs && blobs.length) blobs.forEach((b, i) => {
           const suffix = blobs.length > 1 ? "-part" + (i + 1) : "";
-          downloadBlob(b, "memory-" + new Date((index.meta[id] || {}).date || Date.now()).toISOString().slice(0, 10) + "-" + id + suffix);
+          files.push(blobFile(b, "memory-" + new Date((index.meta[id] || {}).date || Date.now()).toISOString().slice(0, 10) + "-" + id + suffix));
         });
       } catch (e) {}
     }
+    for (const e of (journal.entries || [])) {
+      try {
+        const blobs = await window.__audioGet("j:" + e.id);
+        if (blobs && blobs.length) blobs.forEach((b, i) => files.push(blobFile(b, "journal-" + e.dateISO + "-" + e.id + (blobs.length > 1 ? "-part" + (i + 1) : ""))));
+      } catch (e2) {}
+    }
+    if (!files.length) { setAudioMsg(ft("No recordings on this device yet.")); return; }
+    setAudioMsg(files.length + " " + ft("recordings — choose Save to Files"));
+    await saveFilesSmart(files);
   }
   async function resetAll() {
     for (const id of index.storyIds) await stDelete(storyKey(id));
@@ -2363,7 +2548,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
 
   return (
     <div style={{ minHeight: "100vh", background: T.paper, display: "flex" }}>
-      {graph.settings && graph.settings.pin && !pinOk ? (
+      {hadPinAtMountRef.current && graph.settings && graph.settings.pin && !pinOk ? (
         <div style={{ position: "fixed", inset: 0, background: T.paper, zIndex: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
           <div style={{ textAlign: "center", maxWidth: 320 }}>
             <Eyebrow>{ft("Family ledger")}</Eyebrow>
@@ -2373,7 +2558,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
             <div style={{ marginTop: 14 }}>
               <Btn onClick={() => { if (pinTry === graph.settings.pin) { setPinOk(true); setPinTry(""); } else setPinTry(""); }} disabled={!pinTry}>{ft("Open")}</Btn>
             </div>
-            <p style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded, marginTop: 14 }}>{ft("A curtain for shared devices \\u2014 the storyteller side stays open.")}</p>
+            <p style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded, marginTop: 14 }}>{ft("A curtain for shared devices — the storyteller side stays open.")}</p>
           </div>
         </div>
       ) : null}
@@ -2514,7 +2699,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                       <Btn small variant="ghost" onClick={() => queueGap(g2)}>{ft("Ask this next")}</Btn>
                     </div>
                   ))}
-                  {comp.gaps.length === 0 && <p style={{ fontFamily: T.sans, fontSize: 14, color: T.faded, margin: "8px 0 0" }}>{ft("Nothing obvious is missing \u2014 the tree and the chapters are filling in.")}</p>}
+                  {comp.gaps.length === 0 && <p style={{ fontFamily: T.sans, fontSize: 14, color: T.faded, margin: "8px 0 0" }}>{ft("Nothing obvious is missing — the tree and the chapters are filling in.")}</p>}
                 </Card>
                 <p style={{ fontFamily: T.sans, fontSize: 14.5, color: T.faded, margin: "0 0 16px" }}>
                   The tree grows around <b style={{ color: T.ink }}>{ego}</b> as stories are told. Every fourth story, a family-tree question comes up on its own; blanks become gentle questions in the loom.
@@ -2679,28 +2864,28 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
               <Card>
                 <Eyebrow>{ft("Ask a question")}</Eyebrow>
                 <p style={{ fontFamily: T.sans, fontSize: 14, color: T.faded, margin: "6px 0 12px" }}>
-                  It will be woven into their next story session on this device \u2014 gently, one per sitting, always skippable.
+                  It will be woven into their next story session on this device — gently, one per sitting, always skippable.
                 </p>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                   {speakersList.map(sp => (
                     <Chip key={sp.id} tone={askFor === sp.id ? "ledger" : "brass"} onClick={() => setAskFor(sp.id)}>{sp.name}</Chip>
                   ))}
                 </div>
-                <input value={fromName} onChange={e => setFromName(e.target.value)} placeholder={ft("Your name (shown as: A question from \\u2026)")}
+                <input value={fromName} onChange={e => setFromName(e.target.value)} placeholder={ft("Who's asking? (optional)")}
                   style={{ width: "100%", boxSizing: "border-box", fontFamily: T.sans, fontSize: 14, padding: "9px 11px", borderRadius: 8, border: `1px solid ${T.line}`, background: T.card, color: T.ink, marginBottom: 8 }} />
-                <textarea value={askText} onChange={e => setAskText(e.target.value)} rows={2} placeholder={ft("Type a question\\u2026 e.g. Ask about the summer in Qingdao")}
+                <textarea value={askText} onChange={e => setAskText(e.target.value)} rows={2} placeholder={ft("Type a question… e.g. Ask about the summer in Qingdao")}
                   style={{ width: "100%", boxSizing: "border-box", fontFamily: T.serif, fontSize: 16, padding: "10px 12px", borderRadius: 8, border: `1px solid ${T.line}`, background: T.card, color: T.ink }} />
                 <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
                   <Btn small onClick={submitTypedAsk} disabled={!askText.trim() || !askFor}>{ft("Queue question")}</Btn>
                   {recFam.support.mic !== false && (askRec
-                    ? <Btn small variant="danger" onClick={stopAskRec}><Mic size={14} /> {ft("Stop \\u2014 save voice question")}</Btn>
+                    ? <Btn small variant="danger" onClick={stopAskRec}><Mic size={14} /> {ft("Stop — save voice question")}</Btn>
                     : <Btn small variant="brass" onClick={startAskRec}><Mic size={14} /> {ft("Record it in your voice")}</Btn>)}
                   {typeof window !== "undefined" && window.__blobPut
                     ? <>
                         <input ref={photoInRef} type="file" accept="image/*" style={{ display: "none" }}
                           onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) submitPhotoAsk(f); }} />
                         <Btn small variant="ghost" onClick={() => photoInRef.current && photoInRef.current.click()} disabled={photoBusy}>
-                          {photoBusy ? "Reading the photo\u2026" : "+ Photo to ask about"}
+                          {photoBusy ? "Reading the photo…" : "+ Photo to ask about"}
                         </Btn>
                       </>
                     : <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded }}>(photo & voice questions live in the phone/web app)</span>}
@@ -2710,15 +2895,15 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
               <Card style={{ marginTop: 12 }}>
                 <Eyebrow>{ft("Ask in your own voice")}</Eyebrow>
                 <p style={{ fontFamily: T.sans, fontSize: 13, color: T.faded, margin: "6px 0 10px" }}>
-                  {ft("Record any of the life questions once, and it will be your voice asking it \u2014 not the app\u2019s.")}
+                  {ft("Record any of the life questions once, and it will be your voice asking it — not the app’s.")}
                 </p>
-                <input value={vpSearch} onChange={e => setVpSearch(e.target.value)} placeholder={ft("Search the questions\u2026")}
+                <input value={vpSearch} onChange={e => setVpSearch(e.target.value)} placeholder={ft("Search the questions…")}
                   style={{ width: "100%", boxSizing: "border-box", fontFamily: T.sans, fontSize: 14, padding: "8px 11px", borderRadius: 8, border: `1px solid ${T.line}`, background: T.card, color: T.ink, marginBottom: 8 }} />
                 {Object.keys(graph.voicePack || {}).length > 0 && (
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "0 0 10px" }}>
-                    <Btn small variant="ghost" onClick={exportVoiceSamples}>{"\u2b07"} {ft("Export voice samples")}</Btn>
+                    <Btn small variant="ghost" onClick={exportVoiceSamples}>{"⬇"} {ft("Export voice samples")}</Btn>
                     <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded }}>
-                      {Object.keys(graph.voicePack || {}).length} {ft("recorded \u2014 upload these to ElevenLabs to clone this voice")}
+                      {Object.keys(graph.voicePack || {}).length} {ft("recorded — upload these to ElevenLabs to clone this voice")}
                     </span>
                   </div>
                 )}
@@ -2727,7 +2912,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                     <div key={q.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${T.line}` }}>
                       <div style={{ flex: 1, minWidth: 180, fontFamily: T.serif, fontSize: 14.5, color: T.ink }}>
                         {(LOOM_LANG === "zh" && q.zh) ? q.zh : q.en}
-                        {(graph.voicePack && graph.voicePack[q.id]) ? <span style={{ color: T.ledger, marginLeft: 6 }}>{"\u2713"}</span> : null}
+                        {(graph.voicePack && graph.voicePack[q.id]) ? <span style={{ color: T.ledger, marginLeft: 6 }}>{"✓"}</span> : null}
                       </div>
                       {vpRec === q.id
                         ? <Btn small variant="danger" onClick={stopVoicePack}><Mic size={13} /> {ft("Stop")}</Btn>
@@ -2744,7 +2929,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                       {it.photoId ? <VaultPhoto k={"ph:" + it.photoId} style={{ width: 44, height: 44, objectFit: "cover", margin: 0 }} /> : null}
                       <div style={{ flex: 1, minWidth: 200 }}>
                         <div style={{ fontFamily: T.serif, fontSize: 15, color: T.ink }}>{(it.q && it.q.en) || ""}</div>
-                        <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faded }}>for {(speakersList.find(x => x.id === it.forSpeakerId) || {}).name || "?"} \u00b7 from {it.fromName}{it.voice ? " \u00b7 voice" : ""}</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faded }}>for {(speakersList.find(x => x.id === it.forSpeakerId) || {}).name || "?"} · from {it.fromName}{it.voice ? " · voice" : ""}</div>
                       </div>
                       <Chip tone={it.status === "queued" ? "brass" : it.status === "asked" ? "ledger" : undefined}>{ft(it.status)}</Chip>
                       {it.status !== "asked" && <Btn small variant="ghost" onClick={() => mutateGraph(g => { g.inbox = (g.inbox || []).filter(x => x.id !== it.id); })}>{ft("remove")}</Btn>}
@@ -2780,7 +2965,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
               </div>
               {graph.objects.filter(o => !o.photoId).length > 0 && typeof window !== "undefined" && window.__blobPut && (
                 <Card style={{ marginTop: 14 }}>
-                  <Eyebrow>{ft("Mentioned in stories \\u2014 add a photo to keep them")}</Eyebrow>
+                  <Eyebrow>{ft("Mentioned in stories — add a photo to keep them")}</Eyebrow>
                   {graph.objects.filter(o => !o.photoId).map(o => (
                     <div key={o.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${T.line}` }}>
                       <div style={{ flex: 1, fontFamily: T.serif, fontSize: 15, color: T.ink }}>{o.name}</div>
@@ -2808,14 +2993,14 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                       <div style={{ flex: 1, minWidth: 220 }}>
                         <div style={{ fontFamily: T.serif, fontSize: 17, color: T.ink }}>{m.q}</div>
                         <div style={{ fontFamily: T.mono, fontSize: 12.5, color: T.faded, marginTop: 4 }}>
-                          {m.date ? new Date(m.date).toLocaleDateString() : ""} &#183; {fmtDur(m.dur || 0)}{m.sp ? " \u00b7 " + m.sp : ""}
+                          {m.date ? new Date(m.date).toLocaleDateString() : ""} &#183; {fmtDur(m.dur || 0)}{m.sp ? " · " + m.sp : ""}
                         </div>
                       </div>
                       {m.extract === "ok" && <Chip tone="ledger">{ft("In the ledger")}</Chip>}
                       {m.extract === "pending" && <Chip>{ft("Reading…")}</Chip>}
                       {m.extract === "fail" && <Chip tone="berry">{ft("Failed")}</Chip>}
-                      {m.extract === "waiting" && <Chip tone="brass">{ft("Words needed")}</Chip>}
-                      <PlayClip id={id} />{typeof window !== "undefined" && window.__audioGet ? <Btn small variant="ghost" onClick={async () => { try { const bs = await window.__audioGet(id); if (bs && bs.length) { const files = bs.map((b, i) => blobFile(b, "memory-" + new Date(m.date || Date.now()).toISOString().slice(0, 10) + "-" + id + ((bs.length > 1) ? "-part" + (i + 1) : ""))); await saveFilesSmart(files); } } catch (e) {} }}>{"\u2b07"}</Btn> : null}<Btn small variant="ghost" onClick={async () => { if (!open) await loadStory(id); setOpenStory(open ? null : id); }}>{ft(open ? "close" : "read")}</Btn>
+                      {m.extract === "waiting" && <Chip tone="brass">{ft("Listen — no transcript")}</Chip>}
+                      <PlayClip id={id} />{typeof window !== "undefined" && window.__audioGet ? <Btn small variant="ghost" onClick={async () => { try { const bs = await window.__audioGet(id); if (bs && bs.length) { const files = bs.map((b, i) => blobFile(b, "memory-" + new Date(m.date || Date.now()).toISOString().slice(0, 10) + "-" + id + ((bs.length > 1) ? "-part" + (i + 1) : ""))); await saveFilesSmart(files); } } catch (e) {} }}>{"⬇"}</Btn> : null}<Btn small variant="ghost" onClick={async () => { if (!open) await loadStory(id); setOpenStory(open ? null : id); }}>{ft(open ? "close" : "read")}</Btn>
                     </div>
                     {open && s && (
                       <div style={{ marginTop: 12, borderTop: `1px solid ${T.line}`, paddingTop: 12 }}>
@@ -2841,6 +3026,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                   <input value={(graph.settings && graph.settings.pin) || ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, "").slice(0, 6); mutateGraph(g => { g.settings.pin = v; }); }}
                     placeholder={ft("empty = off")} inputMode="numeric"
                     style={{ fontFamily: T.mono, fontSize: 14, padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.line}`, background: T.card, color: T.ink, width: 110 }} />
+                  {(graph.settings && graph.settings.pin) ? <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.ledger }}>{ft("Locks next time the ledger is opened")}</span> : null}
                   <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded }}>{ft("Keeps casual eyes off this ledger on a shared device. It is a curtain, not encryption.")}</span>
                 </div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
@@ -2849,7 +3035,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                     onClick={() => mutateGraph(g => { g.settings.keepJournalAudio = !g.settings.keepJournalAudio; })}>
                     {ft((graph.settings && graph.settings.keepJournalAudio) ? "on" : "off")}
                   </Chip>
-                  <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded }}>{ft("Off by default \\u2014 the journal\\u2019s value is the recall practice, not the recording.")}</span>
+                  <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded }}>{ft("Off by default — the journal’s value is the recall practice, not the recording.")}</span>
                 </div>
               </Card>
               <Card style={{ marginBottom: 12 }}>
@@ -2859,13 +3045,33 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                   <label style={{ cursor: "pointer" }}>
                     <input type="file" accept="application/json,.json" style={{ display: "none" }}
                       onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importArchive(f); }} />
-                    <Chip tone="brass">{ft("Merge in a family archive\\u2026")}</Chip>
+                    <Chip tone="brass">{ft("Merge in a family archive…")}</Chip>
                   </label>
-                  {typeof window !== "undefined" && window.__audioGet ? <Btn small variant="ghost" onClick={downloadAllAudio}>{"\u2b07"} {ft("All audio files")}</Btn> : null}
+                  {typeof window !== "undefined" && window.__audioGet ? <Btn small variant="ghost" onClick={downloadAllAudio}>{"⬇"} {ft("All audio files")}</Btn> : null}
+                  {audioMsg && <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.berry }}>{audioMsg}</span>}
                 </div>
                 <p style={{ fontFamily: T.sans, fontSize: 12.5, color: T.faded, margin: "8px 0 0" }}>
-                  Merging requires the same \u2605 root person on both devices; stories and entities dedupe by name, near-matches go to Review. Audio never travels in the JSON \u2014 move it with the audio files.
+                  Merging requires the same ★ root person on both devices; stories and entities dedupe by name, near-matches go to Review. Audio never travels in the JSON — move it with the audio files.
                 </p>
+                {pendingImport && (
+                  <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: T.paper, border: `1px solid ${T.line}` }}>
+                    <p style={{ fontFamily: T.serif, fontSize: 15.5, color: T.ink, margin: "0 0 8px" }}>
+                      {LOOM_LANG === "zh"
+                        ? "两边的★主角不同：这边是 " + pendingImport.a + "，那边是 " + pendingImport.b + "。请问 " + pendingImport.b + " 是 " + pendingImport.a + " 的什么人？"
+                        : "The two ★ roots differ — ours is " + pendingImport.a + ", theirs is " + pendingImport.b + ". How is " + pendingImport.b + " related to " + pendingImport.a + "?"}
+                    </p>
+                    <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                      {[["spouse", ft("Spouse")], ["son", ft("Son")], ["daughter", ft("Daughter")], ["brother", ft("Brother")], ["sister", ft("Sister")],
+                        ["mother", ft("Mother")], ["father", ft("Father")], ["grandson", ft("Grandson")], ["granddaughter", ft("Granddaughter")]].map(([rv, lbl]) => (
+                        <Chip key={rv} tone="brass" onClick={() => { const t2 = pendingImport.txt; setPendingImport(null); importArchive(t2, rv); }}>{lbl}</Chip>
+                      ))}
+                      <Chip onClick={() => { setPendingImport(null); setMergeMsg(ft("Merge cancelled.")); }}>{ft("Cancel")}</Chip>
+                    </div>
+                    <p style={{ fontFamily: T.sans, fontSize: 12, color: T.faded, margin: "8px 0 0" }}>
+                      {ft("Relations we can work out are re-anchored to our own ★; anything uncertain waits in \"Not yet placed\" rather than being guessed.")}
+                    </p>
+                  </div>
+                )}
                 {mergeMsg && <p style={{ fontFamily: T.sans, fontSize: 13, color: T.berry, margin: "8px 0 0" }}>{mergeMsg}</p>}
               </Card>
               <Card>
@@ -2877,7 +3083,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                   <Btn onClick={exportAll}><Download size={16} /> {ft("Download graph + stories (.json)")}</Btn>
                 </div>
                 <p style={{ fontFamily: T.sans, fontSize: 13.5, color: T.faded, marginTop: 14, lineHeight: 1.5 }}>
-                  Raw voice recordings download to the device at capture <b>and</b> are kept in this browser\u2019s local audio vault (play them from the Stories tab on this device). They are not on any server — keep those files. Everything else can be rebuilt from them; nothing can be rebuilt without them.
+                  Raw voice recordings download to the device at capture <b>and</b> are kept in this browser’s local audio vault (play them from the Stories tab on this device). They are not on any server — keep those files. Everything else can be rebuilt from them; nothing can be rebuilt without them.
                 </p>
                 <p style={{ fontFamily: T.sans, fontSize: 13.5, color: storageOk ? T.ok : T.warn, marginTop: 8 }}>
                   {storageOk ? "Ledger is saving to this device automatically." : "Persistent storage is unavailable — this session only. Export before closing."}
