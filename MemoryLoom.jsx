@@ -406,7 +406,7 @@ function pickInboxItem({ inbox, speakerId, session }) {
 }
 function skipInboxItem(item) {
   item.skips = (item.skips || 0) + 1;
-  if (item.skips >= 2) item.status = "parked";
+  if (item.skips >= 2) { item.wasStatus = "queued"; item.status = "parked"; item.parkedAt = Date.now(); }
 }
 
 // ---- Completeness engine (v1.9): what is still missing from the history ----
@@ -538,6 +538,18 @@ function planStoryImport(existingIds, stories, spMap) {
     });
   }
   return out;
+}
+
+function reviveParked(items, nowMs) {
+  // A skip usually means "not today", not "never". Anything parked comes back tomorrow.
+  const now = nowMs || Date.now(), DAY = 86400000;
+  let revived = 0;
+  for (const it of (items || [])) {
+    if (!it || it.status !== "parked") continue;
+    if (typeof it.parkedAt !== "number") { it.parkedAt = now; continue; }
+    if (now - it.parkedAt >= DAY) { it.status = it.wasStatus || "suggested"; it.skips = 0; it.parkedAt = null; revived++; }
+  }
+  return revived;
 }
 // ================= END TESTED LOGIC =================
 // ================= STORAGE (window.storage with in-memory fallback) =================
@@ -1004,7 +1016,12 @@ function useRecorder(opts) {
       setSupport(s => ({ ...s, mic: true }));
       try {
         let mr;
-        try { mr = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus", audioBitsPerSecond: 128000 }); }
+        // Safari/iOS give mp4 (opens anywhere); Chrome gives webm. Ask for whatever the
+        // device plays natively first, so exported files are not stuck in webm on a Mac.
+        const prefs = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+        let picked = null;
+        try { picked = prefs.find(t2 => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t2)) || null; } catch (e3) { picked = null; }
+        try { mr = picked ? new MediaRecorder(stream, { mimeType: picked, audioBitsPerSecond: 128000 }) : new MediaRecorder(stream); }
         catch (e2) { mr = new MediaRecorder(stream); }
         mr.ondataavailable = e => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
         mr.start(1000);
@@ -1071,7 +1088,7 @@ function useRecorder(opts) {
 
 function extFor(blob) {
   const t = (blob && blob.type) || "";
-  if (t.includes("mp4")) return "m4a";
+  if (t.includes("mp4") || t.includes("m4a")) return "m4a";
   if (t.includes("ogg")) return "ogg";
   return "webm";
 }
@@ -1450,6 +1467,11 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
         setPhase("question");
         return;
       }
+    }
+    if (!sessRef.current.revived) {
+      sessRef.current.revived = true;
+      const n = reviveParked(graph.gentle) + reviveParked(graph.inbox);
+      if (n) mutateGraph(g => { reviveParked(g.gentle); reviveParked(g.inbox); });
     }
     const inboxIt = pickInboxItem({ inbox: graph.inbox || [], speakerId: speaker.id, session: sessRef.current });
     if (inboxIt) {
@@ -3421,6 +3443,7 @@ export default function MemoryLoom() {
         if (!g.lastChapterBySpeaker) { g.lastChapterBySpeaker = {}; if (rid && g.lastChapter) g.lastChapterBySpeaker[rid] = g.lastChapter; }
         if (g.settings && !g.settings.lang) g.settings.lang = "en";
         if (!g.inbox) g.inbox = [];
+        reviveParked(g.gentle); reviveParked(g.inbox);
         if (!g.dynamicBank) g.dynamicBank = {};
         if (g.settings && g.settings.pin == null) g.settings.pin = "";
         if (g.settings && g.settings.keepJournalAudio == null) g.settings.keepJournalAudio = true;
