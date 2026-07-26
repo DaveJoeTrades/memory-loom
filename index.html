@@ -163,25 +163,31 @@ if (!window.storage) {
   var curEl=null;
   window.__stopSpeakHook=function(){try{if(curEl){curEl.pause();curEl=null;}}catch(e){}};
   function ttsKey(voice,text){var h=0;for(var i=0;i<text.length;i++){h=((h<<5)-h+text.charCodeAt(i))|0;}return 'tts:'+voice+':'+h+':'+text.length;}
+  window.__voiceStatus={state:'not tried yet',detail:''};
   window.__speakHook=async function(text){
     var k=null,v=null,vzh=null;try{k=localStorage.getItem('loom-eleven-key');v=localStorage.getItem('loom-eleven-voice');vzh=localStorage.getItem('loom-eleven-voice-zh');}catch(e){}
     if(!v)v='K3wrFmFwDB8aEufBLV1q';
     var isZh=((String(text||'').match(/[一-鿿]/g)||[]).length>=2);
     if(isZh&&vzh)v=vzh;
-    if(!k||!v)return false;
+    if(!k){window.__voiceStatus={state:'no key',detail:'Paste your ElevenLabs API key in this panel.'};return false;}
+    if(!v){window.__voiceStatus={state:'no voice id',detail:'No voice ID set.'};return false;}
     try{
       var ck=ttsKey(v,text),bl=null;
       try{bl=await window.__blobGet(ck);}catch(e){}
       if(!bl){
         var r=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(v),{method:'POST',headers:{'xi-api-key':k,'Content-Type':'application/json'},body:JSON.stringify({text:text,model_id:'eleven_multilingual_v2'})});
-        if(!r.ok)return false;
+        if(!r.ok){
+          var msg='';try{var j=await r.json();msg=(j&&(j.detail&&(j.detail.message||j.detail.status||j.detail)))||'';}catch(e2){}
+          window.__voiceStatus={state:'ElevenLabs refused (HTTP '+r.status+')',detail:String(msg||'').slice(0,160)};
+          return false;
+        }
         bl=await r.blob();
         try{await window.__blobPut(ck,bl);}catch(e){}
       }
       window.__stopSpeakHook();
       await new Promise(function(res){curEl=new Audio(URL.createObjectURL(bl));curEl.onended=res;curEl.onerror=res;curEl.play().catch(res);});
-      curEl=null;return true;
-    }catch(e){return false;}
+      curEl=null;window.__voiceStatus={state:'working',detail:'Speaking with voice '+v};return true;
+    }catch(e){window.__voiceStatus={state:'could not reach ElevenLabs',detail:String(e&&e.message||e).slice(0,160)};return false;}
   };
   function gear(){
     var btn=document.createElement('button');btn.textContent='⚙ Voice';btn.title='Voice settings';
@@ -196,6 +202,7 @@ if (!window.storage) {
         +'<label style="font-size:12px;color:#75806F;">Speech-to-Text key (optional, sharper transcripts)</label><input id="lv-stt" type="password" autocomplete="off" placeholder="blank = use your voice key" style="width:100%;box-sizing:border-box;margin:4px 0 14px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">'
         +'<h3 style="margin:14px 0 6px;font-size:17px;">Built-in voice</h3><label style="font-size:12px;color:#75806F;">English voice</label><div style="display:flex;gap:6px;margin:4px 0 10px;"><select id="lv-en" style="flex:1;box-sizing:border-box;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;"></select><button id="lv-en-p" type="button" style="padding:0 12px;border:1px solid #DDD6C4;border-radius:8px;background:#F1EEE4;cursor:pointer;font-size:15px;">&#9654;</button></div>'
         +'<label style="font-size:12px;color:#75806F;">中文声音</label><div style="display:flex;gap:6px;margin:4px 0 14px;"><select id="lv-zh" style="flex:1;box-sizing:border-box;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;"></select><button id="lv-zh-p" type="button" style="padding:0 12px;border:1px solid #DDD6C4;border-radius:8px;background:#F1EEE4;cursor:pointer;font-size:15px;">&#9654;</button></div>'
+        +'<div id="lv-status" style="font-size:11.5px;line-height:1.5;color:#75806F;background:#F1EEE4;border:1px solid #DDD6C4;border-radius:8px;padding:9px;margin:0 0 12px;word-break:break-word;max-height:150px;overflow:auto;">checking…</div>'
         +'<div style="display:flex;gap:10px;justify-content:flex-end;"><button id="lv-c" style="padding:9px 14px;border-radius:8px;border:1px solid #DDD6C4;background:#F1EEE4;cursor:pointer;">Close</button><button id="lv-s" style="padding:9px 16px;border-radius:8px;border:0;background:#33534B;color:#FBF9F2;cursor:pointer;">Save</button></div>';
       ov.appendChild(c);document.body.appendChild(ov);
       try{c.querySelector('#lv-k').value=localStorage.getItem('loom-eleven-key')||'';c.querySelector('#lv-v').value=localStorage.getItem('loom-eleven-voice')||'K3wrFmFwDB8aEufBLV1q';c.querySelector('#lv-stt').value=localStorage.getItem('loom-scribe-key')||'';c.querySelector('#lv-vzh').value=localStorage.getItem('loom-eleven-voice-zh')||'';}catch(e){}
@@ -204,7 +211,18 @@ if (!window.storage) {
       function preview(sel,lng){try{var nm=c.querySelector(sel).value;var vs=window.speechSynthesis.getVoices()||[];var v=vs.find(function(x){return x.name===nm});var u=new SpeechSynthesisUtterance(lng==='zh'?'你好，这是我的声音。':'Hello, this is my voice.');if(v){u.voice=v;}if(lng==='zh')u.lang='zh-CN';try{window.speechSynthesis.cancel();window.speechSynthesis.resume();}catch(e){}window.speechSynthesis.speak(u);}catch(e){}}
       function fillVoices(){try{var vs=window.speechSynthesis?window.speechSynthesis.getVoices():[];var mk=function(sel,filt,key){var el=c.querySelector(sel);el.innerHTML='<option value="">(use my system voice)</option>';var cur='';try{cur=localStorage.getItem(key)||''}catch(e){}var local={};vs.filter(filt).forEach(function(v){var lbl=v.name+' ('+v.lang+')';if(local[lbl])return;local[lbl]=1;var o=document.createElement('option');o.value=v.name;o.textContent=lbl;if(v.name===cur)o.selected=true;el.appendChild(o);});};mk('#lv-en',function(v){return /^en/i.test(v.lang)},'loom-voice-en');mk('#lv-zh',function(v){return /zh|cmn/i.test(v.lang)},'loom-voice-zh');}catch(e){}}
       c.querySelector('#lv-en-p').onclick=function(){preview('#lv-en','en')};c.querySelector('#lv-zh-p').onclick=function(){preview('#lv-zh','zh')};
-      fillVoices();try{window.speechSynthesis&&(window.speechSynthesis.onvoiceschanged=fillVoices);}catch(e){}
+      function showStatus(){
+        try{
+          var el=c.querySelector('#lv-status');if(!el)return;
+          var st=window.__voiceStatus||{state:'not tried yet',detail:''};
+          var vs=(window.speechSynthesis&&window.speechSynthesis.getVoices())||[];
+          var names=vs.map(function(x){return x.name+' ('+x.lang+')';});
+          el.innerHTML='<b>Your voice:</b> '+st.state+(st.detail?' — '+st.detail:'')+
+            '<br><b>Built-in voices found:</b> '+vs.length+(names.length?'<br><span style="opacity:.75">'+names.slice(0,40).join(', ')+'</span>':'');
+        }catch(e){}
+      }
+      fillVoices();showStatus();try{window.speechSynthesis&&(window.speechSynthesis.onvoiceschanged=function(){fillVoices();showStatus();});}catch(e){}
+      var stTimer=setInterval(showStatus,1500);ov.addEventListener('remove',function(){clearInterval(stTimer)});
       // Safari/iOS populate the list asynchronously; poll briefly so downloaded voices appear.
       var tries=0,poll=setInterval(function(){tries++;var n=(window.speechSynthesis&&window.speechSynthesis.getVoices()||[]).length;if(n>0){fillVoices();}if(tries>12||n>0&&tries>3)clearInterval(poll);},400);
       c.querySelector('#lv-s').onclick=function(){try{localStorage.setItem('loom-eleven-key',c.querySelector('#lv-k').value.trim());localStorage.setItem('loom-eleven-voice',c.querySelector('#lv-v').value.trim());localStorage.setItem('loom-voice-en',c.querySelector('#lv-en').value);localStorage.setItem('loom-voice-zh',c.querySelector('#lv-zh').value);localStorage.setItem('loom-scribe-key',c.querySelector('#lv-stt').value.trim());localStorage.setItem('loom-eleven-voice-zh',c.querySelector('#lv-vzh').value.trim());}catch(e){}ov.remove();var u=new SpeechSynthesisUtterance(' ');try{window.speechSynthesis.speak(u);}catch(e){}};
@@ -345,7 +363,7 @@ const UI_STR = {
     treeEyebrow: "为了家谱", woven: "由你的故事引出", fromFamily: "来自", photoQ: "关于这张照片", ownStory: "我自己有个故事", ownQ: "讲一个你心里想着的故事吧。", typeHere: "在这里写下故事……" }
 };
 const ACKS_ZH = ["真好。", "太好了。", "这个值得留着。", "谢谢你讲这些。"];
-const APP_VERSION = "v2.6";
+const APP_VERSION = "v2.7";
 // ================= TESTED PURE LOGIC (mirrors logic.js, 46/46 pass) =================
 const NICKNAME_SETS = [
   ["william","bill","will","billy","liam"],["robert","bob","bobby","rob","robbie"],
@@ -3979,8 +3997,16 @@ function MemoryLoom() {
   }, []);
 
   const runExtraction = useCallback(async storyOrId => {
-    const story = (typeof storyOrId === "string") ? await loadStory(storyOrId) : storyOrId;
-    if (!story || !story.id) return;
+    let story = storyOrId;
+    if (typeof storyOrId === "string") {
+      try { const raw = await stGet(storyKey(storyOrId)); story = raw ? JSON.parse(raw) : null; }
+      catch (e) { story = null; }
+    }
+    if (!story || !story.id) {
+      const sid = typeof storyOrId === "string" ? storyOrId : (storyOrId && storyOrId.id);
+      if (sid) setIndexPersist(ix => { if (ix.meta[sid]) ix.meta[sid].extract = "fail"; });
+      return;
+    }
     if (!story.transcript) { setIndexPersist(ix => { if (ix.meta[story.id]) ix.meta[story.id].extract = "waiting"; }); return; }
     setIndexPersist(ix => { if (ix.meta[story.id]) ix.meta[story.id].extract = "pending"; });
     const sps = (graph.settings && graph.settings.speakers) || [];

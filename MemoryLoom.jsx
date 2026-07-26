@@ -103,7 +103,7 @@ const UI_STR = {
     treeEyebrow: "为了家谱", woven: "由你的故事引出", fromFamily: "来自", photoQ: "关于这张照片", ownStory: "我自己有个故事", ownQ: "讲一个你心里想着的故事吧。", typeHere: "在这里写下故事……" }
 };
 const ACKS_ZH = ["真好。", "太好了。", "这个值得留着。", "谢谢你讲这些。"];
-const APP_VERSION = "v2.6";
+const APP_VERSION = "v2.7";
 // ================= TESTED PURE LOGIC (mirrors logic.js, 46/46 pass) =================
 const NICKNAME_SETS = [
   ["william","bill","will","billy","liam"],["robert","bob","bobby","rob","robbie"],
@@ -3732,8 +3732,16 @@ export default function MemoryLoom() {
   }, []);
 
   const runExtraction = useCallback(async storyOrId => {
-    const story = (typeof storyOrId === "string") ? await loadStory(storyOrId) : storyOrId;
-    if (!story || !story.id) return;
+    let story = storyOrId;
+    if (typeof storyOrId === "string") {
+      try { const raw = await stGet(storyKey(storyOrId)); story = raw ? JSON.parse(raw) : null; }
+      catch (e) { story = null; }
+    }
+    if (!story || !story.id) {
+      const sid = typeof storyOrId === "string" ? storyOrId : (storyOrId && storyOrId.id);
+      if (sid) setIndexPersist(ix => { if (ix.meta[sid]) ix.meta[sid].extract = "fail"; });
+      return;
+    }
     if (!story.transcript) { setIndexPersist(ix => { if (ix.meta[story.id]) ix.meta[story.id].extract = "waiting"; }); return; }
     setIndexPersist(ix => { if (ix.meta[story.id]) ix.meta[story.id].extract = "pending"; });
     const sps = (graph.settings && graph.settings.speakers) || [];
