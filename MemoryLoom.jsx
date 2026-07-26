@@ -1767,6 +1767,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
   const convoRef = useRef({ start: 0, cnt: 0 });
   const sessFURef = useRef(0);
   const pT = p => p ? (p[lang] || p.en || p) : "";
+  const today = isoToday();
   const draftKey = "draft:" + speaker.id + ":" + today;
   const savedDraft = (journal.drafts && journal.drafts[draftKey]) || null;
   const [phase, setPhase] = useState(savedDraft ? (savedDraft.phase || "boot") : "boot");
@@ -1777,7 +1778,6 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
   const [pIdx, setPIdx] = useState(savedDraft ? (savedDraft.pIdx || 0) : 0);
   const [answers, setAnswers] = useState(savedDraft ? (savedDraft.answers || []) : []);
   const [streak, setStreak] = useState(1);
-  const today = isoToday();
 
   useEffect(() => {
     if (phase !== "boot") return;
@@ -1997,7 +1997,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
   );
 }
 let LOOM_LANG = "en";
-const FTZH = { "Review": "待核对", "People": "人物", "Places": "地点", "Moments": "时刻", "Family tree": "家谱", "Journal": "小记", "Ask": "提问", "Keepsakes": "念想", "Questions": "问题", "Stories": "故事", "Export": "导出", "MEMORY LOOM": "记忆织机", "Hand to storyteller": "交给讲述人", "Family ledger": "家庭档案", "Enter the PIN": "请输入密码", "Open": "打开", "A curtain for shared devices — the storyteller side stays open.": "共用设备上的一道帘子——讲述人那边始终敞开。", "Ask a question": "提一个问题", "Queue question": "排入问题", "Record it in your voice": "用你的声音录下来", "Stop — save voice question": "停——保存语音问题", "+ Photo to ask about": "+ 想问的照片", "Reading the photo…": "正在看照片……", "Queued & asked": "排队与已问", "remove": "删除", "queued": "排队中", "asked": "已问", "parked": "暂放", "voice": "语音", "story told": "故事已讲", "waiting to be asked": "等着被问起", "from the stories": "来自故事", "+ photo": "+ 照片", "No keepsakes yet. Add a photo in the Ask tab, or attach one to a mentioned object below.": "还没有念想。到“提问”里加一张照片，或给下面提到的物件配一张。", "Keepsake photos live on the device app (the deployed web version), not in this preview.": "念想照片保存在设备上的正式网页应用里，预览版看不到。", "Mentioned in stories — add a photo to keep them": "故事里提到的——配上照片留下来", "It will be woven into their next story session on this device — gently, one per sitting, always skippable.": "会在这台设备上、他们下次讲故事时轻轻带出——每次至多一个，随时可以跳过。", "One family, two devices": "一家人，两台设备", "Family archive (.json)": "家庭档案文件 (.json)", "Merge in a family archive…": "并入一份家庭档案……", "Merging requires the same ★ root person on both devices; stories and entities dedupe by name, near-matches go to Review. Audio never travels in the JSON — move it with the audio files.": "合并要求两台设备的★主角相同；故事与条目按名字去重，拿不准的进“待核对”。录音不随 JSON 走——请连同音频文件一起转移。", "That file is not a Memory Loom archive or ledger.": "这个文件不是记忆织机的档案或账本。", "Could not merge — the archive has no ★ root speaker.": "无法合并——档案里没有★主角。", "Could not read that file.": "无法读取这个文件。", "The whole ledger": "整本账本", "Erase the whole ledger…": "抹去整本账本……", "Keep everything": "全部保留", "Careful now": "当心", "This erases every story and entity. Downloaded files stay on the device.": "这会抹去所有故事和条目。已下载的文件仍留在设备上。", "Yes, erase": "是的，抹去", "Family ledger settings": "家庭档案设置", "PIN curtain:": "密码帘：", "Keep journal audio:": "保留小记录音：", "Keeps casual eyes off this ledger on a shared device. It is a curtain, not encryption.": "在共用设备上挡一挡随意的目光。是帘子，不是加密。", "Off by default — the journal’s value is the recall practice, not the recording.": "小记的价值在回忆练习，不在录音本身。", "on": "开", "off": "关", "All audio files": "全部音频文件", "Ledger is saving to this device automatically.": "账本会自动保存在这台设备上。", "Persistent storage is unavailable — this session only. Export before closing.": "无法持久保存——仅本次会话有效。关闭前请先导出。", "No stories yet. Hand the other screen to your storyteller and begin.": "还没有故事。把另一个界面交给讲述人，开始吧。", "read": "读", "close": "收起", "In the ledger": "已入账", "Reading…": "读取中……", "Failed": "失败", "Words needed": "缺文字", "Reading failed": "读取失败", "Suggested from the stories": "从故事里想到的", "Ask them, gently": "轻轻问一问", "Ask first": "先问这个", "Park": "暂放", "Parked": "已暂放", "Set aside": "放一放", "Nothing suggested right now.": "眼下没有新的建议。", "Bring back": "取回", "How the ledger treats what it hears": "账本如何对待听到的话", "Placing someone here never involves the storyteller — it just tidies the ledger.": "在这里安放某人从不打扰讲述人——只是把账本理整齐。", "The storyteller": "讲述人", "Spouse": "配偶", "Brothers & sisters": "兄弟姐妹", "Parents": "父母", "Grandparents & earlier": "祖辈及更早", "Children": "子女", "Grandchildren": "孙辈", "Extended family": "亲族", "Not yet placed — where do they belong?": "尚未安放——他们属于哪里？", "No one in the tree yet. The family-tree questions will bring them in.": "家谱里还没有人。家谱问题会把他们带进来。", "No one in the ledger yet. People will appear here as stories are told.": "账本里还没有人。随着故事讲出，人会在这里出现。", "Places from the stories will gather here.": "故事里的地点会聚到这里。", "Moments — weddings, crossings, first days — will gather here.": "时刻——婚礼、远渡、头一天——会聚到这里。", "Connections heard in the stories": "故事里听到的关联", "When was this?": "这是什么时候？", "Save year": "保存年份", "About the time ": "大约在 ", "Leave as told": "照原话保留", "They&#39;re different": "不是同一个", "Rename": "改名", "Reword": "改写", "Save the words": "保存这些话", "Journals appear once someone starts their daily two minutes on the storyteller screen.": "当有人在讲述人界面开始每天两分钟，小记就会出现。", "No journal entries yet.": "还没有小记。", "Sensory details": "感官细节", "No safety copy yet.": "还没有安全备份。", "Make one": "做一份", "Search the ledger…": "搜索账本……", "Family note (photos and corrections live here for now)": "家人备注（照片与更正暂记于此）", "Type a question… e.g. Ask about the summer in Qingdao": "输入一个问题……比如：问问青岛的那个夏天", "Your name (shown as: A question from …)": "你的名字（显示为：来自……的问题）", "empty = off": "留空＝关闭", "year": "年份", "no audio": "无录音", "This device is the only home of these stories.": "这台设备是这些故事唯一的家。", "days old": "天前" , "Download graph + stories (.json)": "下载账本＋故事 (.json)", "Read again": "重新读取", "Transcript": "文字稿", "Try again": "再试一次", "Weave it in": "织进去", "Yes, erase": "是的，抹去", "What is still missing": "还缺什么", "Life story": "人生故事", "most important": "最要紧", "important": "要紧", "later": "以后", "Ask this next": "下次问这个", "Nothing obvious is missing — the tree and the chapters are filling in.": "暂时没有明显的空白——家谱和篇章都在填上。", "Ask in your own voice": "用你自己的声音问", "Record any of the life questions once, and it will be your voice asking it — not the app’s.": "把任意一个问题录一次，以后就是你的声音在问，而不是机器。", "Search the questions…": "搜索问题……", "Record": "录音", "Redo": "重录", "Stop": "停", "Export voice samples": "导出声音样本", "recorded — upload these to ElevenLabs to clone this voice": "段已录——可上传到 ElevenLabs 克隆这个声音", "Who's asking? (optional)": "谁在问？（可选）", "Listen — no transcript": "请听录音——没有文字", "Locks next time the ledger is opened": "下次打开档案时生效", "Gathering the recordings…": "正在收集录音……", "No recordings on this device yet.": "这台设备上还没有录音。", "recordings — choose Save to Files": "段录音——请选择“存储到文件”", "Son": "儿子", "Daughter": "女儿", "Brother": "兄弟", "Sister": "姐妹", "Mother": "母亲", "Father": "父亲", "Grandson": "孙子", "Granddaughter": "孙女", "Cancel": "取消", "Merge cancelled.": "已取消合并。", "Relations we can work out are re-anchored to our own ★; anything uncertain waits in \"Not yet placed\" rather than being guessed.": "能推算的关系会换算到我们的★；拿不准的放进“尚未安放”，绝不瞎猜。", "Forgotten the PIN?": "忘记密码了？", "Remove the PIN": "取消密码", "Removing the PIN opens the ledger for anyone holding this device. Your stories are untouched.": "取消密码后，拿着这台设备的人都能打开档案。你的故事不受影响。", "Chinese voice ID (optional)": "中文声音 ID（可选）", "Voice settings (ElevenLabs keys)": "声音设置（ElevenLabs 密钥）", "Keys and voices are stored on this device only.": "密钥与声音只保存在这台设备上。"};
+const FTZH = { "Review": "待核对", "People": "人物", "Places": "地点", "Moments": "时刻", "Family tree": "家谱", "Journal": "小记", "Ask": "提问", "Keepsakes": "念想", "Questions": "问题", "Stories": "故事", "Export": "导出", "MEMORY LOOM": "记忆织机", "Hand to storyteller": "交给讲述人", "Family ledger": "家庭档案", "Enter the PIN": "请输入密码", "Open": "打开", "A curtain for shared devices — the storyteller side stays open.": "共用设备上的一道帘子——讲述人那边始终敞开。", "Ask a question": "提一个问题", "Queue question": "排入问题", "Record it in your voice": "用你的声音录下来", "Stop — save voice question": "停——保存语音问题", "+ Photo to ask about": "+ 想问的照片", "Reading the photo…": "正在看照片……", "Queued & asked": "排队与已问", "remove": "删除", "queued": "排队中", "asked": "已问", "parked": "暂放", "voice": "语音", "story told": "故事已讲", "waiting to be asked": "等着被问起", "from the stories": "来自故事", "+ photo": "+ 照片", "No keepsakes yet. Add a photo in the Ask tab, or attach one to a mentioned object below.": "还没有念想。到“提问”里加一张照片，或给下面提到的物件配一张。", "Keepsake photos live on the device app (the deployed web version), not in this preview.": "念想照片保存在设备上的正式网页应用里，预览版看不到。", "Mentioned in stories — add a photo to keep them": "故事里提到的——配上照片留下来", "It will be woven into their next story session on this device — gently, one per sitting, always skippable.": "会在这台设备上、他们下次讲故事时轻轻带出——每次至多一个，随时可以跳过。", "One family, two devices": "一家人，两台设备", "Family archive (.json)": "家庭档案文件 (.json)", "Merge in a family archive…": "并入一份家庭档案……", "Merging requires the same ★ root person on both devices; stories and entities dedupe by name, near-matches go to Review. Audio never travels in the JSON — move it with the audio files.": "合并要求两台设备的★主角相同；故事与条目按名字去重，拿不准的进“待核对”。录音不随 JSON 走——请连同音频文件一起转移。", "That file is not a Memory Loom archive or ledger.": "这个文件不是记忆织机的档案或账本。", "Could not merge — the archive has no ★ root speaker.": "无法合并——档案里没有★主角。", "Could not read that file.": "无法读取这个文件。", "The whole ledger": "整本账本", "Erase the whole ledger…": "抹去整本账本……", "Keep everything": "全部保留", "Careful now": "当心", "This erases every story and entity. Downloaded files stay on the device.": "这会抹去所有故事和条目。已下载的文件仍留在设备上。", "Yes, erase": "是的，抹去", "Family ledger settings": "家庭档案设置", "PIN curtain:": "密码帘：", "Keep journal audio:": "保留小记录音：", "Keeps casual eyes off this ledger on a shared device. It is a curtain, not encryption.": "在共用设备上挡一挡随意的目光。是帘子，不是加密。", "Off by default — the journal’s value is the recall practice, not the recording.": "小记的价值在回忆练习，不在录音本身。", "on": "开", "off": "关", "All audio files": "全部音频文件", "Ledger is saving to this device automatically.": "账本会自动保存在这台设备上。", "Persistent storage is unavailable — this session only. Export before closing.": "无法持久保存——仅本次会话有效。关闭前请先导出。", "No stories yet. Hand the other screen to your storyteller and begin.": "还没有故事。把另一个界面交给讲述人，开始吧。", "read": "读", "close": "收起", "In the ledger": "已入账", "Reading…": "读取中……", "Failed": "失败", "Words needed": "缺文字", "Reading failed": "读取失败", "Suggested from the stories": "从故事里想到的", "Ask them, gently": "轻轻问一问", "Ask first": "先问这个", "Park": "暂放", "Parked": "已暂放", "Set aside": "放一放", "Nothing suggested right now.": "眼下没有新的建议。", "Bring back": "取回", "How the ledger treats what it hears": "账本如何对待听到的话", "Placing someone here never involves the storyteller — it just tidies the ledger.": "在这里安放某人从不打扰讲述人——只是把账本理整齐。", "The storyteller": "讲述人", "Spouse": "配偶", "Brothers & sisters": "兄弟姐妹", "Parents": "父母", "Grandparents & earlier": "祖辈及更早", "Children": "子女", "Grandchildren": "孙辈", "Extended family": "亲族", "Not yet placed — where do they belong?": "尚未安放——他们属于哪里？", "No one in the tree yet. The family-tree questions will bring them in.": "家谱里还没有人。家谱问题会把他们带进来。", "No one in the ledger yet. People will appear here as stories are told.": "账本里还没有人。随着故事讲出，人会在这里出现。", "Places from the stories will gather here.": "故事里的地点会聚到这里。", "Moments — weddings, crossings, first days — will gather here.": "时刻——婚礼、远渡、头一天——会聚到这里。", "Connections heard in the stories": "故事里听到的关联", "When was this?": "这是什么时候？", "Save year": "保存年份", "About the time ": "大约在 ", "Leave as told": "照原话保留", "They&#39;re different": "不是同一个", "Rename": "改名", "Reword": "改写", "Save the words": "保存这些话", "Journals appear once someone starts their daily two minutes on the storyteller screen.": "当有人在讲述人界面开始每天两分钟，小记就会出现。", "No journal entries yet.": "还没有小记。", "Sensory details": "感官细节", "No safety copy yet.": "还没有安全备份。", "Make one": "做一份", "Search the ledger…": "搜索账本……", "Family note (photos and corrections live here for now)": "家人备注（照片与更正暂记于此）", "Type a question… e.g. Ask about the summer in Qingdao": "输入一个问题……比如：问问青岛的那个夏天", "Your name (shown as: A question from …)": "你的名字（显示为：来自……的问题）", "empty = off": "留空＝关闭", "year": "年份", "no audio": "无录音", "This device is the only home of these stories.": "这台设备是这些故事唯一的家。", "days old": "天前" , "Read again": "重新读取", "Transcript": "文字稿", "Try again": "再试一次", "Weave it in": "织进去", "Yes, erase": "是的，抹去", "What is still missing": "还缺什么", "Life story": "人生故事", "most important": "最要紧", "important": "要紧", "later": "以后", "Ask this next": "下次问这个", "Nothing obvious is missing — the tree and the chapters are filling in.": "暂时没有明显的空白——家谱和篇章都在填上。", "Ask in your own voice": "用你自己的声音问", "Record any of the life questions once, and it will be your voice asking it — not the app’s.": "把任意一个问题录一次，以后就是你的声音在问，而不是机器。", "Search the questions…": "搜索问题……", "Record": "录音", "Redo": "重录", "Stop": "停", "Export voice samples": "导出声音样本", "recorded — upload these to ElevenLabs to clone this voice": "段已录——可上传到 ElevenLabs 克隆这个声音", "Who's asking? (optional)": "谁在问？（可选）", "Listen — no transcript": "请听录音——没有文字", "Locks next time the ledger is opened": "下次打开档案时生效", "Gathering the recordings…": "正在收集录音……", "No recordings on this device yet.": "这台设备上还没有录音。", "recordings — choose Save to Files": "段录音——请选择“存储到文件”", "Son": "儿子", "Daughter": "女儿", "Brother": "兄弟", "Sister": "姐妹", "Mother": "母亲", "Father": "父亲", "Grandson": "孙子", "Granddaughter": "孙女", "Cancel": "取消", "Merge cancelled.": "已取消合并。", "Relations we can work out are re-anchored to our own ★; anything uncertain waits in \"Not yet placed\" rather than being guessed.": "能推算的关系会换算到我们的★；拿不准的放进“尚未安放”，绝不瞎猜。", "Forgotten the PIN?": "忘记密码了？", "Remove the PIN": "取消密码", "Removing the PIN opens the ledger for anyone holding this device. Your stories are untouched.": "取消密码后，拿着这台设备的人都能打开档案。你的故事不受影响。", "Chinese voice ID (optional)": "中文声音 ID（可选）", "Voice settings (ElevenLabs keys)": "声音设置（ElevenLabs 密钥）", "Keys and voices are stored on this device only.": "密钥与声音只保存在这台设备上。", "Family voices": "家人的声音", "Turn someone's own recordings into a voice, then let the app ask questions in it. Only ever with that person's say-so.": "把某个人自己的录音做成声音，再用它来提问。务必征得本人同意。", "They agreed to this": "本人已同意", "Create their voice": "生成他的声音", "Working…": "处理中……", "voice ready": "声音已就绪", "Use for English": "用于英文", "Use for Chinese": "用于中文", "asking in English ✓": "英文提问中 ✓", "asking in Chinese ✓": "中文提问中 ✓", "Tick the consent box first.": "请先勾选同意。", "Gathering recordings…": "正在收集录音……", "No recordings for this person yet — record a story or a question first.": "这个人还没有录音——先录一个故事或问题。", "recordings — sending to ElevenLabs…": "段录音——正在发送到 ElevenLabs……", "Cloning failed: ": "生成失败：", "Voice created for ": "已生成声音：", "Questions will now be asked in ": "以后将用这个声音提问：", "'s voice.": "。", "'s voice (Chinese).": "（中文）。"};
 function ft(s) { return (LOOM_LANG === "zh" && FTZH[s]) ? FTZH[s] : s; }
 function fileToScaledJpeg(file, maxDim) {
   return new Promise((resolve) => {
@@ -2202,6 +2202,44 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
       try { const bs = await window.__audioGet("qv:" + qid); if (bs && bs[0]) files.push(blobFile(bs[0], "voice-sample-" + qid)); } catch (e) {}
     }
     if (files.length) await saveFilesSmart(files);
+  }
+  const [cloneMsg, setCloneMsg] = useState("");
+  const [cloneBusy, setCloneBusy] = useState(false);
+  const [consent, setConsent] = useState({});
+  async function audioForPerson(sp) {
+    // Everything recorded in this person's voice: their stories, plus any questions they recorded.
+    const blobs = [];
+    if (typeof window === "undefined" || !window.__audioGet) return blobs;
+    for (const id of index.storyIds) {
+      const m = index.meta[id] || {};
+      if (m.sp !== sp.name) continue;
+      try { const bs = await window.__audioGet(id); if (bs) blobs.push(...bs); } catch (e) {}
+    }
+    for (const qid of Object.keys(graph.voicePack || {})) {
+      try { const bs = await window.__audioGet("qv:" + qid); if (bs) blobs.push(...bs); } catch (e) {}
+    }
+    return blobs;
+  }
+  async function cloneFor(sp) {
+    if (!consent[sp.id]) { setCloneMsg(ft("Tick the consent box first.")); return; }
+    setCloneBusy(true); setCloneMsg(ft("Gathering recordings…"));
+    try {
+      const blobs = await audioForPerson(sp);
+      if (!blobs.length) { setCloneMsg(ft("No recordings for this person yet — record a story or a question first.")); return; }
+      setCloneMsg(blobs.length + " " + ft("recordings — sending to ElevenLabs…"));
+      const res = await window.__cloneVoice(sp.name + " (Memory Loom)", blobs);
+      if (!res || !res.ok) { setCloneMsg(ft("Cloning failed: ") + ((res && res.error) || "unknown")); return; }
+      mutateGraph(g => { g.voices = g.voices || {}; g.voices[sp.id] = { voiceId: res.voiceId, name: sp.name, consentAt: Date.now() }; });
+      setCloneMsg(ft("Voice created for ") + sp.name + ".");
+    } catch (e) { setCloneMsg(ft("Cloning failed: ") + String(e && e.message || e)); }
+    finally { setCloneBusy(false); }
+  }
+  function useAsNarrator(sp, lang2) {
+    const v = (graph.voices || {})[sp.id];
+    if (!v || typeof window === "undefined" || !window.__setVoice) return;
+    window.__setVoice(v.voiceId, lang2);
+    mutateGraph(g => { g.settings.narrator = g.settings.narrator || {}; g.settings.narrator[lang2 || "en"] = sp.id; });
+    setCloneMsg(ft("Questions will now be asked in ") + sp.name + ((lang2 === "zh") ? ft("'s voice (Chinese).") : ft("'s voice.")));
   }
   async function startVoicePack(qid) { const ok = await recFam.start(); if (ok) setVpRec(qid); }
   async function stopVoicePack() {
@@ -2778,6 +2816,46 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                   ))}
                 </div>
               </Card>
+              {typeof window !== "undefined" && window.__cloneVoice && (
+                <Card style={{ marginTop: 12 }}>
+                  <Eyebrow>{ft("Family voices")}</Eyebrow>
+                  <p style={{ fontFamily: T.sans, fontSize: 13, color: T.faded, margin: "6px 0 12px", lineHeight: 1.5 }}>
+                    {ft("Turn someone's own recordings into a voice, then let the app ask questions in it. Only ever with that person's say-so.")}
+                  </p>
+                  {speakersList.map(sp => {
+                    const v = (graph.voices || {})[sp.id];
+                    const narratorEn = ((graph.settings.narrator || {}).en === sp.id);
+                    const narratorZh = ((graph.settings.narrator || {}).zh === sp.id);
+                    return (
+                      <div key={sp.id} style={{ padding: "10px 0", borderTop: `1px solid ${T.line}` }}>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                          <div style={{ flex: 1, minWidth: 160, fontFamily: T.serif, fontSize: 16, color: T.ink }}>
+                            {sp.name}
+                            {v ? <span style={{ fontFamily: T.mono, fontSize: 11, color: T.ledger, marginLeft: 8 }}>{ft("voice ready")}</span> : null}
+                          </div>
+                          {v ? (
+                            <>
+                              <Chip tone={narratorEn ? "ledger" : "brass"} onClick={() => useAsNarrator(sp, "en")}>{narratorEn ? ft("asking in English ✓") : ft("Use for English")}</Chip>
+                              <Chip tone={narratorZh ? "ledger" : "brass"} onClick={() => useAsNarrator(sp, "zh")}>{narratorZh ? ft("asking in Chinese ✓") : ft("Use for Chinese")}</Chip>
+                            </>
+                          ) : (
+                            <>
+                              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.sans, fontSize: 12.5, color: T.faded }}>
+                                <input type="checkbox" checked={!!consent[sp.id]} onChange={e => setConsent(c => Object.assign({}, c, { [sp.id]: e.target.checked }))} />
+                                {ft("They agreed to this")}
+                              </label>
+                              <Btn small variant="brass" disabled={cloneBusy || !consent[sp.id]} onClick={() => cloneFor(sp)}>
+                                {cloneBusy ? ft("Working…") : ft("Create their voice")}
+                              </Btn>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {cloneMsg && <p style={{ fontFamily: T.sans, fontSize: 13, color: T.berry, margin: "10px 0 0" }}>{cloneMsg}</p>}
+                </Card>
+              )}
               {(graph.inbox || []).length > 0 && (
                 <Card style={{ marginTop: 12 }}>
                   <Eyebrow>{ft("Queued & asked")}</Eyebrow>
@@ -2943,7 +3021,7 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                   {graph.people.length} people &#183; {graph.places.length} places &#183; {graph.events.length} moments &#183; {index.storyIds.length} stories
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <Btn onClick={exportAll}><Download size={16} /> {ft("Download graph + stories (.json)")}</Btn>
+
                 </div>
                 <p style={{ fontFamily: T.sans, fontSize: 13.5, color: T.faded, marginTop: 14, lineHeight: 1.5 }}>
                   Raw voice recordings download to the device at capture <b>and</b> are kept in this browser’s local audio vault (play them from the Stories tab on this device). They are not on any server — keep those files. Everything else can be rebuilt from them; nothing can be rebuilt without them.
