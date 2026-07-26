@@ -382,7 +382,7 @@ const UI_STR = {
     treeEyebrow: "为了家谱", woven: "由你的故事引出", fromFamily: "来自", photoQ: "关于这张照片", ownStory: "我自己有个故事", ownQ: "讲一个你心里想着的故事吧。", typeHere: "在这里写下故事……" }
 };
 const ACKS_ZH = ["这个值得留着。", "记下来就不会丢了。", "这段我还是头一回听。", "这样的事最容易失传。", "存好了。", "我喜欢这个。"];
-const APP_VERSION = "v3.2";
+const APP_VERSION = "v3.3";
 // ================= TESTED PURE LOGIC (mirrors logic.js, 46/46 pass) =================
 const NICKNAME_SETS = [
   ["william","bill","will","billy","liam"],["robert","bob","bobby","rob","robbie"],
@@ -949,6 +949,7 @@ function pickVoice(lang) {
   } catch (e) { return null; }
 }
 function browserSpeak(text, opts) {
+  const done = opts && opts.onDone;
   try {
     const synth = window.speechSynthesis;
     const wantZh = opts && opts.lang === "zh";
@@ -962,7 +963,8 @@ function browserSpeak(text, opts) {
     try { synth.cancel(); } catch (e) {}
     // Chrome/Safari sometimes leave synth in a paused state after cancel(); resume unsticks it.
     try { synth.resume(); } catch (e) {}
-    const go = () => { try { synth.speak(u); } catch (e) {} };
+    if (done) { u.onend = () => done(); u.onerror = () => done(); }
+    const go = () => { try { synth.speak(u); } catch (e) { if (done) done(); } };
     // A tiny delay lets cancel() settle, but too long drops it on iOS; 0 works best post-resume.
     setTimeout(go, 0);
   } catch (e) {}
@@ -978,12 +980,14 @@ function detectTextLang(text) {
   return cjk >= 2 ? "zh" : null;
 }
 function speak(text, opts) {
-  if (!text) return;
+  const done = opts && opts.onDone;
+  if (!text) { if (done) done(); return; }
   const auto = detectTextLang(text);
   if (auto) opts = Object.assign({}, opts || {}, { lang: auto });
   (async () => {
-    try { if (window.__speakHook && await window.__speakHook(text)) return; } catch (e) {}
+    try { if (window.__speakHook && await window.__speakHook(text)) { if (done) done(); return; } } catch (e) {}
     if (ttsSupported()) browserSpeak(text, opts);
+    else if (done) done();
   })();
 }
 function stopSpeak() {
@@ -1631,7 +1635,10 @@ function StorytellerView({ graph, mutateGraph, setIndexPersist, runExtraction, g
   const speaker = speakers.find(s => s.id === currentId) || speakers[0] || null;
   const firstName = speaker ? speaker.name.split(" ")[0] : "";
 
-  const say = useCallback((text) => { if (tts) speak(text, { lang }); }, [tts, lang]);
+  const say = useCallback((text, onDone) => {
+    if (tts) speak(text, { lang, onDone });
+    else if (onDone) setTimeout(onDone, 300);
+  }, [tts, lang]);
   useEffect(() => () => { stopSpeak(); releaseLoomMic(); }, []);
   useEffect(() => {
     if (subMode || callDoneRef.current || !speaker) return;
@@ -2267,12 +2274,22 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
   useEffect(() => {
     if (phase === "recallQ" && recallList[rIdx]) say((lang === "zh" ? "来看看你还记得吗。" : "Let me see what you remember. ") + recallList[rIdx].q);
     // Reaction and question go out as ONE utterance: two speak() calls in a row cancel each other.
-    if (phase === "promptQ" && prompts[pIdx]) say((reaction ? reaction + " " : "") + pT(prompts[pIdx]));
-    if (phase === "fuQ" && fuQ) say((reaction ? reaction + " " : "") + fuQ);
+    if (phase === "promptQ" && prompts[pIdx]) say((reaction ? reaction + " " : "") + pT(prompts[pIdx]), () => autoListen("promptQ", "promptLive"));
+    if (phase === "fuQ" && fuQ) say((reaction ? reaction + " " : "") + fuQ, () => autoListen("fuQ", "fuLive"));
     if (phase === "recallSay" && gradeSay) say(gradeSay);
   }, [phase, rIdx, pIdx, gradeSay, fuQ, reaction]);
 
   async function startTalking(next) { stopSpeak(); const ok = await rec.start(); if (ok) setPhase(next); }
+  const phaseRef = useRef(phase);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  async function autoListen(fromPhase, toPhase) {
+    // Only open the mic if we are still sitting on the same question and one is available.
+    if (rec.support.mic === false) return;
+    await new Promise(r => setTimeout(r, 450));   // a beat, so it does not clip its own last word
+    if (phaseRef.current !== fromPhase) return;
+    const ok = await rec.start();
+    if (ok && phaseRef.current === fromPhase) setPhase(toPhase);
+  }
   // Auto-stop after a pause. Journal answers are short, so silence means "done".
   // Story sessions deliberately do NOT do this — long tellings have long pauses in them.
   const heardRef = useRef("");
@@ -2449,7 +2466,8 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
                 <>
                   <TalkKey liveMode={false} onClick={() => { setSilent(false); startTalking(phase === "recallQ" ? "recallLive" : phase === "fuQ" ? "fuLive" : "promptLive"); }} />
                   <p style={{ fontFamily: T.sans, fontSize: 15, color: silent ? T.berry : T.faded, marginTop: 10 }}>
-                    {silent ? (lang === "zh" ? "慢慢来，再按一下就好。" : "Take your time — press again when you’re ready.") : t.tellMe}
+                    {silent ? (lang === "zh" ? "慢慢来，再按一下就好。" : "Take your time — press again when you’re ready.")
+                      : (lang === "zh" ? "直接说就行，我在听。" : "Just start talking — I’m listening.")}
                   </p>
                 </>
               )}
