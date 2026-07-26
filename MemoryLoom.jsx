@@ -103,7 +103,7 @@ const UI_STR = {
     treeEyebrow: "为了家谱", woven: "由你的故事引出", fromFamily: "来自", photoQ: "关于这张照片", ownStory: "我自己有个故事", ownQ: "讲一个你心里想着的故事吧。", typeHere: "在这里写下故事……" }
 };
 const ACKS_ZH = ["真好。", "太好了。", "这个值得留着。", "谢谢你讲这些。"];
-const APP_VERSION = "v2.5";
+const APP_VERSION = "v2.6";
 // ================= TESTED PURE LOGIC (mirrors logic.js, 46/46 pass) =================
 const NICKNAME_SETS = [
   ["william","bill","will","billy","liam"],["robert","bob","bobby","rob","robbie"],
@@ -550,6 +550,51 @@ function reviveParked(items, nowMs) {
     if (now - it.parkedAt >= DAY) { it.status = it.wasStatus || "suggested"; it.skips = 0; it.parkedAt = null; revived++; }
   }
   return revived;
+}
+
+// ---- Companion-app bridge (v2.6): a stable contract for external tools ----
+// Manifest v1:
+// { kind: "memory-loom-photos", version: 1,
+//   photos: [{ file: "IMG_0421.jpg", takenAt: "1962-07-04", place: "Qingdao",
+//              people: ["Rose","Wei"], caption: "", forSpeakerName: "Rose" }] }
+// The companion app writes this JSON next to the image files; Memory Loom reads both.
+function parsePhotoManifest(raw) {
+  let data = null;
+  try { data = typeof raw === "string" ? JSON.parse(raw) : raw; } catch (e) { return { ok: false, reason: "not-json" }; }
+  if (!data || data.kind !== "memory-loom-photos") return { ok: false, reason: "wrong-kind" };
+  if (data.version !== 1) return { ok: false, reason: "version", version: data.version };
+  const photos = Array.isArray(data.photos) ? data.photos : [];
+  const items = [];
+  const problems = [];
+  for (const p of photos) {
+    if (!p || typeof p.file !== "string" || !p.file.trim()) { problems.push("entry with no file name"); continue; }
+    const takenAt = typeof p.takenAt === "string" && /^\d{4}(-\d{2}(-\d{2})?)?$/.test(p.takenAt) ? p.takenAt : null;
+    items.push({
+      file: p.file.trim(),
+      takenAt,
+      year: takenAt ? takenAt.slice(0, 4) : null,
+      place: typeof p.place === "string" ? p.place.trim() : "",
+      people: Array.isArray(p.people) ? p.people.filter(x => typeof x === "string" && x.trim()).map(x => x.trim()) : [],
+      caption: typeof p.caption === "string" ? p.caption.trim() : "",
+      forSpeakerName: typeof p.forSpeakerName === "string" ? p.forSpeakerName.trim() : ""
+    });
+  }
+  return { ok: true, items, problems, count: items.length };
+}
+// A question the app can ask about a scanned photo before any AI is involved,
+// so an import still works offline or without an API key.
+function photoQuestionFallback(item, lang) {
+  const who = (item.people || []).slice(0, 2).join(" and ");
+  if (lang === "zh") {
+    if (who && item.year) return "\u8bb2\u8bb2" + item.year + "\u5e74\u548c" + who + "\u7684\u8fd9\u5f20\u7167\u7247\u5427\u3002";
+    if (who) return "\u8bb2\u8bb2\u8fd9\u5f20\u6709" + who + "\u7684\u7167\u7247\u5427\u3002";
+    return "\u8bb2\u8bb2\u8fd9\u5f20\u7167\u7247\u7684\u6545\u4e8b\u5427\u3002";
+  }
+  if (who && item.year) return "Tell me about this photo of " + who + ", around " + item.year + ".";
+  if (who) return "Tell me about this photo of " + who + ".";
+  if (item.year && item.place) return "Tell me about this photo from " + item.place + ", around " + item.year + ".";
+  if (item.year) return "Tell me about this photo from around " + item.year + ".";
+  return "Tell me the story of this photo.";
 }
 // ================= END TESTED LOGIC =================
 // ================= STORAGE (window.storage with in-memory fallback) =================
@@ -2144,7 +2189,7 @@ function JournalFlow({ journal, mutateJournal, speaker, rec, say, tts, setTts, g
   );
 }
 let LOOM_LANG = "en";
-const FTZH = { "Review": "待核对", "People": "人物", "Places": "地点", "Moments": "时刻", "Family tree": "家谱", "Journal": "小记", "Ask": "提问", "Keepsakes": "念想", "Questions": "问题", "Stories": "故事", "Export": "导出", "MEMORY LOOM": "记忆织机", "Hand to storyteller": "交给讲述人", "Family ledger": "家庭档案", "Enter the PIN": "请输入密码", "Open": "打开", "A curtain for shared devices — the storyteller side stays open.": "共用设备上的一道帘子——讲述人那边始终敞开。", "Ask a question": "提一个问题", "Queue question": "排入问题", "Record it in your voice": "用你的声音录下来", "Stop — save voice question": "停——保存语音问题", "+ Photo to ask about": "+ 想问的照片", "Reading the photo…": "正在看照片……", "Queued & asked": "排队与已问", "remove": "删除", "queued": "排队中", "asked": "已问", "parked": "暂放", "voice": "语音", "story told": "故事已讲", "waiting to be asked": "等着被问起", "from the stories": "来自故事", "+ photo": "+ 照片", "No keepsakes yet. Add a photo in the Ask tab, or attach one to a mentioned object below.": "还没有念想。到“提问”里加一张照片，或给下面提到的物件配一张。", "Keepsake photos live on the device app (the deployed web version), not in this preview.": "念想照片保存在设备上的正式网页应用里，预览版看不到。", "Mentioned in stories — add a photo to keep them": "故事里提到的——配上照片留下来", "It will be woven into their next story session on this device — gently, one per sitting, always skippable.": "会在这台设备上、他们下次讲故事时轻轻带出——每次至多一个，随时可以跳过。", "One family, two devices": "一家人，两台设备", "Family archive (.json)": "家庭档案文件 (.json)", "Merge in a family archive…": "并入一份家庭档案……", "Merging requires the same ★ root person on both devices; stories and entities dedupe by name, near-matches go to Review. Audio never travels in the JSON — move it with the audio files.": "合并要求两台设备的★主角相同；故事与条目按名字去重，拿不准的进“待核对”。录音不随 JSON 走——请连同音频文件一起转移。", "That file is not a Memory Loom archive or ledger.": "这个文件不是记忆织机的档案或账本。", "Could not merge — the archive has no ★ root speaker.": "无法合并——档案里没有★主角。", "Could not read that file.": "无法读取这个文件。", "The whole ledger": "整本账本", "Erase the whole ledger…": "抹去整本账本……", "Keep everything": "全部保留", "Careful now": "当心", "This erases every story and entity. Downloaded files stay on the device.": "这会抹去所有故事和条目。已下载的文件仍留在设备上。", "Yes, erase": "是的，抹去", "Family ledger settings": "家庭档案设置", "PIN curtain:": "密码帘：", "Keep journal audio:": "保留小记录音：", "Keeps casual eyes off this ledger on a shared device. It is a curtain, not encryption.": "在共用设备上挡一挡随意的目光。是帘子，不是加密。", "Off by default — the journal’s value is the recall practice, not the recording.": "小记的价值在回忆练习，不在录音本身。", "on": "开", "off": "关", "All audio files": "全部音频文件", "Ledger is saving to this device automatically.": "账本会自动保存在这台设备上。", "Persistent storage is unavailable — this session only. Export before closing.": "无法持久保存——仅本次会话有效。关闭前请先导出。", "No stories yet. Hand the other screen to your storyteller and begin.": "还没有故事。把另一个界面交给讲述人，开始吧。", "read": "读", "close": "收起", "In the ledger": "已入账", "Reading…": "读取中……", "Failed": "失败", "Words needed": "缺文字", "Reading failed": "读取失败", "Suggested from the stories": "从故事里想到的", "Ask them, gently": "轻轻问一问", "Ask first": "先问这个", "Park": "暂放", "Parked": "已暂放", "Set aside": "放一放", "Nothing suggested right now.": "眼下没有新的建议。", "Bring back": "取回", "How the ledger treats what it hears": "账本如何对待听到的话", "Placing someone here never involves the storyteller — it just tidies the ledger.": "在这里安放某人从不打扰讲述人——只是把账本理整齐。", "The storyteller": "讲述人", "Spouse": "配偶", "Brothers & sisters": "兄弟姐妹", "Parents": "父母", "Grandparents & earlier": "祖辈及更早", "Children": "子女", "Grandchildren": "孙辈", "Extended family": "亲族", "Not yet placed — where do they belong?": "尚未安放——他们属于哪里？", "No one in the tree yet. The family-tree questions will bring them in.": "家谱里还没有人。家谱问题会把他们带进来。", "No one in the ledger yet. People will appear here as stories are told.": "账本里还没有人。随着故事讲出，人会在这里出现。", "Places from the stories will gather here.": "故事里的地点会聚到这里。", "Moments — weddings, crossings, first days — will gather here.": "时刻——婚礼、远渡、头一天——会聚到这里。", "Connections heard in the stories": "故事里听到的关联", "When was this?": "这是什么时候？", "Save year": "保存年份", "About the time ": "大约在 ", "Leave as told": "照原话保留", "They’re different": "不是同一个", "Rename": "改名", "Reword": "改写", "Save the words": "保存这些话", "Journals appear once someone starts their daily few minutes on the storyteller screen.": "当有人在讲述人界面开始每天两分钟，小记就会出现。", "No journal entries yet.": "还没有小记。", "Sensory details": "感官细节", "No safety copy yet.": "还没有安全备份。", "Make one": "做一份", "Search the ledger…": "搜索账本……", "Family note (photos and corrections live here for now)": "家人备注（照片与更正暂记于此）", "Type a question… e.g. Ask about the summer in Qingdao": "输入一个问题……比如：问问青岛的那个夏天", "Your name (shown as: A question from …)": "你的名字（显示为：来自……的问题）", "empty = off": "留空＝关闭", "year": "年份", "no audio": "无录音", "This device is the only home of these stories.": "这台设备是这些故事唯一的家。", "days old": "天前" , "Read again": "重新读取", "Transcript": "文字稿", "Try again": "再试一次", "Weave it in": "织进去", "Yes, erase": "是的，抹去", "What is still missing": "还缺什么", "Life story": "人生故事", "most important": "最要紧", "important": "要紧", "later": "以后", "Ask this next": "下次问这个", "Nothing obvious is missing — the tree and the chapters are filling in.": "暂时没有明显的空白——家谱和篇章都在填上。", "Ask in your own voice": "用你自己的声音问", "Record any of the life questions once, and it will be your voice asking it — not the app’s.": "把任意一个问题录一次，以后就是你的声音在问，而不是机器。", "Search the questions…": "搜索问题……", "Record": "录音", "Redo": "重录", "Stop": "停", "Export voice samples": "导出声音样本", "recorded — upload these to ElevenLabs to clone this voice": "段已录——可上传到 ElevenLabs 克隆这个声音", "Who's asking? (optional)": "谁在问？（可选）", "Listen — no transcript": "请听录音——没有文字", "Locks next time the ledger is opened": "下次打开档案时生效", "Gathering the recordings…": "正在收集录音……", "No recordings on this device yet.": "这台设备上还没有录音。", "recordings — choose Save to Files": "段录音——请选择“存储到文件”", "Son": "儿子", "Daughter": "女儿", "Brother": "兄弟", "Sister": "姐妹", "Mother": "母亲", "Father": "父亲", "Grandson": "孙子", "Granddaughter": "孙女", "Cancel": "取消", "Merge cancelled.": "已取消合并。", "Relations we can work out are re-anchored to our own ★; anything uncertain waits in \"Not yet placed\" rather than being guessed.": "能推算的关系会换算到我们的★；拿不准的放进“尚未安放”，绝不瞎猜。", "Forgotten the PIN?": "忘记密码了？", "Remove the PIN": "取消密码", "Removing the PIN opens the ledger for anyone holding this device. Your stories are untouched.": "取消密码后，拿着这台设备的人都能打开档案。你的故事不受影响。", "Chinese voice ID (optional)": "中文声音 ID（可选）", "Voice settings (ElevenLabs keys)": "声音设置（ElevenLabs 密钥）", "Keys and voices are stored on this device only.": "密钥与声音只保存在这台设备上。", "Family voices": "家人的声音", "Turn someone's own recordings into a voice, then let the app ask questions in it. Only ever with that person's say-so.": "把某个人自己的录音做成声音，再用它来提问。务必征得本人同意。", "They agreed to this": "本人已同意", "Create their voice": "生成他的声音", "Working…": "处理中……", "voice ready": "声音已就绪", "Use for English": "用于英文", "Use for Chinese": "用于中文", "asking in English ✓": "英文提问中 ✓", "asking in Chinese ✓": "中文提问中 ✓", "Tick the consent box first.": "请先勾选同意。", "Gathering recordings…": "正在收集录音……", "No recordings for this person yet — record a story or a question first.": "这个人还没有录音——先录一个故事或问题。", "recordings — sending to ElevenLabs…": "段录音——正在发送到 ElevenLabs……", "Cloning failed: ": "生成失败：", "Voice created for ": "已生成声音：", "Questions will now be asked in ": "以后将用这个声音提问：", "'s voice.": "。", "'s voice (Chinese).": "（中文）。", "Try it with a sample family": "用示例家庭试一试", "Loads ten invented stories so you can see the tree, people, places and gaps fill in — no recording needed. Marked as sample and removable in one tap.": "载入十个虚构的故事，让你看到家谱、人物、地点和空白如何填上——无需录音。标记为示例，一键即可移除。", "Load sample family": "载入示例家庭", "Remove sample": "移除示例", "Weaving a sample family…": "正在编织示例家庭……", "Add a storyteller first, then load the sample.": "请先添加一位讲述人，再载入示例。", "sample stories loaded — look at Family tree, People and Stories.": "个示例故事已载入——去看看家谱、人物和故事。", "Removing the sample…": "正在移除示例……", "Sample removed. Your real stories are untouched.": "示例已移除。你真实的故事未受影响。", "make a new ElevenLabs key with the create_instant_voice_clone permission ticked, then paste it into ⚙ Voice.": "请在 ElevenLabs 新建一个勾选了 create_instant_voice_clone 权限的密钥，再粘贴到「⚙ Voice」中。", "All audio files (zip)": "全部音频（打包 zip）", "recordings — building a zip…": "段录音——正在打包……", "recordings zipped — choose Save to Files": "段录音已打包——请选择「存储到文件」", "Bring audio back in…": "把音频导回……", "Matching recordings to stories…": "正在把录音和故事对上……", "recordings re-linked": "段录音已重新关联", "skipped (name not recognised)": "个跳过（文件名无法识别）", "Could not read those files.": "无法读取这些文件。", "Told about in": "出现在这些故事里", "a story": "一个故事", "Tell me about them": "说说这个人", "Load 10 ready-made": "载入 10 个现成的", "Have Claude write them": "让 Claude 来写", "Writing…": "正在写……", "Claude is writing ": "Claude 正在写 ", " stories… this takes a minute.": " 个故事……需要一会儿。", "Nothing came back — check the API key in the key gate.": "没有返回内容——请检查 API 密钥。", "Reading story ": "正在读入第 ", " into the ledger…": " 个故事……", "stories written and read into the ledger.": "个故事已写好并读入账本。", "Sample failed: ": "示例失败：", "Add someone by hand": "手动添加一位", "Their name": "他的名字", "Add to the tree": "加入家谱", "Relations are relative to ★.": "关系以★为准。", "Remove from the tree": "从家谱中移出", "sure?": "确定？", "unplaced": "未安放", "Claude has written ": "Claude 已写了 ", " stories…": " 个故事……", "Family spine: ": "家庭主线：", " relatives, ": " 位亲人，", " dated events.": " 个有年份的事件。", "The family, drawn": "家谱图", "Grandparents": "祖辈", "Tap anyone to see their stories. Relations are relative to ★.": "点任意一位查看他的故事。关系以★为准。", "A forgotten PIN can only be cleared by someone who can also reach this device's storage — so this is a curtain, not a lock. To confirm you mean it, type REMOVE below.": "忘记密码只能由能接触这台设备存储的人来清除——所以这是帘子，不是锁。确认请在下面输入 REMOVE。", "Keeps casual eyes off this ledger on a shared device. Anyone who can open this browser's storage can bypass it — real protection is the device passcode.": "在共用设备上挡一挡随意的目光。能打开浏览器存储的人都能绕过——真正的保护是设备锁屏密码。"};
+const FTZH = { "Review": "待核对", "People": "人物", "Places": "地点", "Moments": "时刻", "Family tree": "家谱", "Journal": "小记", "Ask": "提问", "Keepsakes": "念想", "Questions": "问题", "Stories": "故事", "Export": "导出", "MEMORY LOOM": "记忆织机", "Hand to storyteller": "交给讲述人", "Family ledger": "家庭档案", "Enter the PIN": "请输入密码", "Open": "打开", "A curtain for shared devices — the storyteller side stays open.": "共用设备上的一道帘子——讲述人那边始终敞开。", "Ask a question": "提一个问题", "Queue question": "排入问题", "Record it in your voice": "用你的声音录下来", "Stop — save voice question": "停——保存语音问题", "+ Photo to ask about": "+ 想问的照片", "Reading the photo…": "正在看照片……", "Queued & asked": "排队与已问", "remove": "删除", "queued": "排队中", "asked": "已问", "parked": "暂放", "voice": "语音", "story told": "故事已讲", "waiting to be asked": "等着被问起", "from the stories": "来自故事", "+ photo": "+ 照片", "No keepsakes yet. Add a photo in the Ask tab, or attach one to a mentioned object below.": "还没有念想。到“提问”里加一张照片，或给下面提到的物件配一张。", "Keepsake photos live on the device app (the deployed web version), not in this preview.": "念想照片保存在设备上的正式网页应用里，预览版看不到。", "Mentioned in stories — add a photo to keep them": "故事里提到的——配上照片留下来", "It will be woven into their next story session on this device — gently, one per sitting, always skippable.": "会在这台设备上、他们下次讲故事时轻轻带出——每次至多一个，随时可以跳过。", "One family, two devices": "一家人，两台设备", "Family archive (.json)": "家庭档案文件 (.json)", "Merge in a family archive…": "并入一份家庭档案……", "Merging requires the same ★ root person on both devices; stories and entities dedupe by name, near-matches go to Review. Audio never travels in the JSON — move it with the audio files.": "合并要求两台设备的★主角相同；故事与条目按名字去重，拿不准的进“待核对”。录音不随 JSON 走——请连同音频文件一起转移。", "That file is not a Memory Loom archive or ledger.": "这个文件不是记忆织机的档案或账本。", "Could not merge — the archive has no ★ root speaker.": "无法合并——档案里没有★主角。", "Could not read that file.": "无法读取这个文件。", "The whole ledger": "整本账本", "Erase the whole ledger…": "抹去整本账本……", "Keep everything": "全部保留", "Careful now": "当心", "This erases every story and entity. Downloaded files stay on the device.": "这会抹去所有故事和条目。已下载的文件仍留在设备上。", "Yes, erase": "是的，抹去", "Family ledger settings": "家庭档案设置", "PIN curtain:": "密码帘：", "Keep journal audio:": "保留小记录音：", "Keeps casual eyes off this ledger on a shared device. It is a curtain, not encryption.": "在共用设备上挡一挡随意的目光。是帘子，不是加密。", "Off by default — the journal’s value is the recall practice, not the recording.": "小记的价值在回忆练习，不在录音本身。", "on": "开", "off": "关", "All audio files": "全部音频文件", "Ledger is saving to this device automatically.": "账本会自动保存在这台设备上。", "Persistent storage is unavailable — this session only. Export before closing.": "无法持久保存——仅本次会话有效。关闭前请先导出。", "No stories yet. Hand the other screen to your storyteller and begin.": "还没有故事。把另一个界面交给讲述人，开始吧。", "read": "读", "close": "收起", "In the ledger": "已入账", "Reading…": "读取中……", "Failed": "失败", "Words needed": "缺文字", "Reading failed": "读取失败", "Suggested from the stories": "从故事里想到的", "Ask them, gently": "轻轻问一问", "Ask first": "先问这个", "Park": "暂放", "Parked": "已暂放", "Set aside": "放一放", "Nothing suggested right now.": "眼下没有新的建议。", "Bring back": "取回", "How the ledger treats what it hears": "账本如何对待听到的话", "Placing someone here never involves the storyteller — it just tidies the ledger.": "在这里安放某人从不打扰讲述人——只是把账本理整齐。", "The storyteller": "讲述人", "Spouse": "配偶", "Brothers & sisters": "兄弟姐妹", "Parents": "父母", "Grandparents & earlier": "祖辈及更早", "Children": "子女", "Grandchildren": "孙辈", "Extended family": "亲族", "Not yet placed — where do they belong?": "尚未安放——他们属于哪里？", "No one in the tree yet. The family-tree questions will bring them in.": "家谱里还没有人。家谱问题会把他们带进来。", "No one in the ledger yet. People will appear here as stories are told.": "账本里还没有人。随着故事讲出，人会在这里出现。", "Places from the stories will gather here.": "故事里的地点会聚到这里。", "Moments — weddings, crossings, first days — will gather here.": "时刻——婚礼、远渡、头一天——会聚到这里。", "Connections heard in the stories": "故事里听到的关联", "When was this?": "这是什么时候？", "Save year": "保存年份", "About the time ": "大约在 ", "Leave as told": "照原话保留", "They’re different": "不是同一个", "Rename": "改名", "Reword": "改写", "Save the words": "保存这些话", "Journals appear once someone starts their daily few minutes on the storyteller screen.": "当有人在讲述人界面开始每天两分钟，小记就会出现。", "No journal entries yet.": "还没有小记。", "Sensory details": "感官细节", "No safety copy yet.": "还没有安全备份。", "Make one": "做一份", "Search the ledger…": "搜索账本……", "Family note (photos and corrections live here for now)": "家人备注（照片与更正暂记于此）", "Type a question… e.g. Ask about the summer in Qingdao": "输入一个问题……比如：问问青岛的那个夏天", "Your name (shown as: A question from …)": "你的名字（显示为：来自……的问题）", "empty = off": "留空＝关闭", "year": "年份", "no audio": "无录音", "This device is the only home of these stories.": "这台设备是这些故事唯一的家。", "days old": "天前" , "Read again": "重新读取", "Transcript": "文字稿", "Try again": "再试一次", "Weave it in": "织进去", "Yes, erase": "是的，抹去", "What is still missing": "还缺什么", "Life story": "人生故事", "most important": "最要紧", "important": "要紧", "later": "以后", "Ask this next": "下次问这个", "Nothing obvious is missing — the tree and the chapters are filling in.": "暂时没有明显的空白——家谱和篇章都在填上。", "Ask in your own voice": "用你自己的声音问", "Record any of the life questions once, and it will be your voice asking it — not the app’s.": "把任意一个问题录一次，以后就是你的声音在问，而不是机器。", "Search the questions…": "搜索问题……", "Record": "录音", "Redo": "重录", "Stop": "停", "Export voice samples": "导出声音样本", "recorded — upload these to ElevenLabs to clone this voice": "段已录——可上传到 ElevenLabs 克隆这个声音", "Who's asking? (optional)": "谁在问？（可选）", "Listen — no transcript": "请听录音——没有文字", "Locks next time the ledger is opened": "下次打开档案时生效", "Gathering the recordings…": "正在收集录音……", "No recordings on this device yet.": "这台设备上还没有录音。", "recordings — choose Save to Files": "段录音——请选择“存储到文件”", "Son": "儿子", "Daughter": "女儿", "Brother": "兄弟", "Sister": "姐妹", "Mother": "母亲", "Father": "父亲", "Grandson": "孙子", "Granddaughter": "孙女", "Cancel": "取消", "Merge cancelled.": "已取消合并。", "Relations we can work out are re-anchored to our own ★; anything uncertain waits in \"Not yet placed\" rather than being guessed.": "能推算的关系会换算到我们的★；拿不准的放进“尚未安放”，绝不瞎猜。", "Forgotten the PIN?": "忘记密码了？", "Remove the PIN": "取消密码", "Removing the PIN opens the ledger for anyone holding this device. Your stories are untouched.": "取消密码后，拿着这台设备的人都能打开档案。你的故事不受影响。", "Chinese voice ID (optional)": "中文声音 ID（可选）", "Voice settings (ElevenLabs keys)": "声音设置（ElevenLabs 密钥）", "Keys and voices are stored on this device only.": "密钥与声音只保存在这台设备上。", "Family voices": "家人的声音", "Turn someone's own recordings into a voice, then let the app ask questions in it. Only ever with that person's say-so.": "把某个人自己的录音做成声音，再用它来提问。务必征得本人同意。", "They agreed to this": "本人已同意", "Create their voice": "生成他的声音", "Working…": "处理中……", "voice ready": "声音已就绪", "Use for English": "用于英文", "Use for Chinese": "用于中文", "asking in English ✓": "英文提问中 ✓", "asking in Chinese ✓": "中文提问中 ✓", "Tick the consent box first.": "请先勾选同意。", "Gathering recordings…": "正在收集录音……", "No recordings for this person yet — record a story or a question first.": "这个人还没有录音——先录一个故事或问题。", "recordings — sending to ElevenLabs…": "段录音——正在发送到 ElevenLabs……", "Cloning failed: ": "生成失败：", "Voice created for ": "已生成声音：", "Questions will now be asked in ": "以后将用这个声音提问：", "'s voice.": "。", "'s voice (Chinese).": "（中文）。", "Try it with a sample family": "用示例家庭试一试", "Loads ten invented stories so you can see the tree, people, places and gaps fill in — no recording needed. Marked as sample and removable in one tap.": "载入十个虚构的故事，让你看到家谱、人物、地点和空白如何填上——无需录音。标记为示例，一键即可移除。", "Load sample family": "载入示例家庭", "Remove sample": "移除示例", "Weaving a sample family…": "正在编织示例家庭……", "Add a storyteller first, then load the sample.": "请先添加一位讲述人，再载入示例。", "sample stories loaded — look at Family tree, People and Stories.": "个示例故事已载入——去看看家谱、人物和故事。", "Removing the sample…": "正在移除示例……", "Sample removed. Your real stories are untouched.": "示例已移除。你真实的故事未受影响。", "make a new ElevenLabs key with the create_instant_voice_clone permission ticked, then paste it into ⚙ Voice.": "请在 ElevenLabs 新建一个勾选了 create_instant_voice_clone 权限的密钥，再粘贴到「⚙ Voice」中。", "All audio files (zip)": "全部音频（打包 zip）", "recordings — building a zip…": "段录音——正在打包……", "recordings zipped — choose Save to Files": "段录音已打包——请选择「存储到文件」", "Bring audio back in…": "把音频导回……", "Matching recordings to stories…": "正在把录音和故事对上……", "recordings re-linked": "段录音已重新关联", "skipped (name not recognised)": "个跳过（文件名无法识别）", "Could not read those files.": "无法读取这些文件。", "Told about in": "出现在这些故事里", "a story": "一个故事", "Tell me about them": "说说这个人", "Load 10 ready-made": "载入 10 个现成的", "Have Claude write them": "让 Claude 来写", "Writing…": "正在写……", "Claude is writing ": "Claude 正在写 ", " stories… this takes a minute.": " 个故事……需要一会儿。", "Nothing came back — check the API key in the key gate.": "没有返回内容——请检查 API 密钥。", "Reading story ": "正在读入第 ", " into the ledger…": " 个故事……", "stories written and read into the ledger.": "个故事已写好并读入账本。", "Sample failed: ": "示例失败：", "Add someone by hand": "手动添加一位", "Their name": "他的名字", "Add to the tree": "加入家谱", "Relations are relative to ★.": "关系以★为准。", "Remove from the tree": "从家谱中移出", "sure?": "确定？", "unplaced": "未安放", "Claude has written ": "Claude 已写了 ", " stories…": " 个故事……", "Family spine: ": "家庭主线：", " relatives, ": " 位亲人，", " dated events.": " 个有年份的事件。", "The family, drawn": "家谱图", "Grandparents": "祖辈", "Tap anyone to see their stories. Relations are relative to ★.": "点任意一位查看他的故事。关系以★为准。", "A forgotten PIN can only be cleared by someone who can also reach this device's storage — so this is a curtain, not a lock. To confirm you mean it, type REMOVE below.": "忘记密码只能由能接触这台设备存储的人来清除——所以这是帘子，不是锁。确认请在下面输入 REMOVE。", "Keeps casual eyes off this ledger on a shared device. Anyone who can open this browser's storage can bypass it — real protection is the device passcode.": "在共用设备上挡一挡随意的目光。能打开浏览器存储的人都能绕过——真正的保护是设备锁屏密码。", "Bring in a photo scan": "导入照片扫描", "Select the manifest .json produced by the companion scanner together with its photos. Each photo becomes a gentle question, with its date, place and people already known.": "请把扫描程序生成的 manifest.json 和照片一起选中。每张照片都会变成一个温和的问题，日期、地点和人物都已知晓。", "Choose manifest + photos…": "选择 manifest 与照片……", "Include the manifest .json from the scanner along with the photos.": "请连同扫描程序的 manifest.json 一起选择。", "Photo import needs the installed web app.": "导入照片需要使用正式网页应用。", "Reading the manifest…": "正在读取清单……", "That file is not a Memory Loom photo manifest.": "这不是记忆织机的照片清单。", "That scan was made by a newer version of the companion app.": "该扫描来自更新版本的伴侣程序。", "Bringing in ": "正在导入 ", "photos queued as questions": "张照片已排入问题", "missing image files": "个图片文件缺失", "bad entries": "条无效记录", "Photo scan": "照片扫描"};
 function ft(s) { return (LOOM_LANG === "zh" && FTZH[s]) ? FTZH[s] : s; }
 function fileToScaledJpeg(file, maxDim) {
   return new Promise((resolve) => {
@@ -2779,6 +2824,55 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
     const out = await callClaude(prompt);
     speak((out && out.trim()) || (name + ". " + (e.details || []).join(". ")), { lang: LOOM_LANG });
   }
+  const [scanMsg, setScanMsg] = useState("");
+  const scanRef = useRef(null);
+  async function importPhotoScan(files) {
+    if (!files || !files.length) return;
+    const manifestFile = files.find(f => /\.json$/i.test(f.name));
+    if (!manifestFile) { setScanMsg(ft("Include the manifest .json from the scanner along with the photos.")); return; }
+    if (typeof window === "undefined" || !window.__blobPut) { setScanMsg(ft("Photo import needs the installed web app.")); return; }
+    setScanMsg(ft("Reading the manifest…"));
+    let parsed;
+    try { parsed = parsePhotoManifest(await manifestFile.text()); }
+    catch (e) { setScanMsg(ft("Could not read that file.")); return; }
+    if (!parsed.ok) {
+      setScanMsg(parsed.reason === "version"
+        ? ft("That scan was made by a newer version of the companion app.")
+        : ft("That file is not a Memory Loom photo manifest."));
+      return;
+    }
+    const byName = {};
+    files.forEach(f => { byName[f.name] = f; });
+    const speakers = (graph.settings.speakers || []);
+    const fallbackSp = (graph.settings.currentSpeakerId || graph.settings.rootSpeakerId || (speakers[0] || {}).id || "");
+    let queued = 0, missing = 0;
+    for (const item of parsed.items) {
+      const file = byName[item.file];
+      if (!file) { missing++; continue; }
+      setScanMsg(ft("Bringing in ") + item.file + "…");
+      const sc = await fileToScaledJpeg(file, 1024);
+      if (!sc) { missing++; continue; }
+      const pid = uid();
+      await window.__blobPut("ph:" + pid, sc.blob);
+      const target = speakers.find(sp => sp.name.trim().toLowerCase() === (item.forSpeakerName || "").trim().toLowerCase());
+      const forId = (target && target.id) || fallbackSp;
+      let q = { en: photoQuestionFallback(item, "en"), zh: photoQuestionFallback(item, "zh") };
+      try {
+        const better = await photoQuestion(sc.b64, sc.mediaType);
+        if (better && better.en) q = better;
+      } catch (e) { /* the fallback question is already good enough to ask */ }
+      mutateGraph(g => {
+        g.inbox = g.inbox || [];
+        g.inbox.push({ id: uid(), forSpeakerId: forId, fromName: ft("Photo scan"), q, photoId: pid,
+          scanMeta: { takenAt: item.takenAt, place: item.place, people: item.people, caption: item.caption },
+          status: "queued", skips: 0, createdAt: Date.now() });
+      });
+      queued++;
+    }
+    setScanMsg(queued + " " + ft("photos queued as questions") +
+      (missing ? " · " + missing + " " + ft("missing image files") : "") +
+      (parsed.problems.length ? " · " + parsed.problems.length + " " + ft("bad entries") : ""));
+  }
   const [audioIn, setAudioIn] = useState("");
   const audioInRef = useRef(null);
   async function importAudioFiles(files) {
@@ -3254,6 +3348,20 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
                 </div>
                 {askRec && <p style={{ fontFamily: T.serif, fontSize: 15, color: T.berry, marginTop: 8 }}>{recFam.finalText + " " + recFam.interim}</p>}
               </Card>
+              {typeof window !== "undefined" && window.__blobPut && (
+                <Card style={{ marginTop: 12 }}>
+                  <Eyebrow>{ft("Bring in a photo scan")}</Eyebrow>
+                  <p style={{ fontFamily: T.sans, fontSize: 13, color: T.faded, margin: "6px 0 10px", lineHeight: 1.5 }}>
+                    {ft("Select the manifest .json produced by the companion scanner together with its photos. Each photo becomes a gentle question, with its date, place and people already known.")}
+                  </p>
+                  <input ref={scanRef} type="file" accept="image/*,application/json,.json" multiple style={{ display: "none" }}
+                    onChange={e => { const fl = Array.from(e.target.files || []); e.target.value = ""; importPhotoScan(fl); }} />
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <Btn small variant="brass" onClick={() => scanRef.current && scanRef.current.click()}>{ft("Choose manifest + photos…")}</Btn>
+                    {scanMsg && <span style={{ fontFamily: T.sans, fontSize: 12.5, color: T.berry }}>{scanMsg}</span>}
+                  </div>
+                </Card>
+              )}
               <Card style={{ marginTop: 12 }}>
                 <Eyebrow>{ft("Ask in your own voice")}</Eyebrow>
                 <p style={{ fontFamily: T.sans, fontSize: 13, color: T.faded, margin: "6px 0 10px" }}>
