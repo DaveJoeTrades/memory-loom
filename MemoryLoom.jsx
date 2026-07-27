@@ -103,7 +103,7 @@ const UI_STR = {
     treeEyebrow: "为了家谱", woven: "由你的故事引出", fromFamily: "来自", photoQ: "关于这张照片", ownStory: "我自己有个故事", ownQ: "讲一个你心里想着的故事吧。", typeHere: "在这里写下故事……" }
 };
 const ACKS_ZH = ["这个值得留着。", "记下来就不会丢了。", "这段我还是头一回听。", "这样的事最容易失传。", "存好了。", "我喜欢这个。"];
-const APP_VERSION = "v3.6";
+const APP_VERSION = "v3.7";
 // ================= TESTED PURE LOGIC (mirrors logic.js, 46/46 pass) =================
 const NICKNAME_SETS = [
   ["william","bill","will","billy","liam"],["robert","bob","bobby","rob","robbie"],
@@ -866,8 +866,12 @@ async function saveFilesSmart(files) {
   // gesture, which is most of the time here since files are gathered asynchronously.
   // Only phones and tablets get the share sheet; on a desktop it swallows the file and
   // a plain download is what the person actually wants.
-  const touch = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  // A Mac reports touch points for its trackpad, which wrongly pushed desktop saves into
+  // the share popover. Phones and tablets only.
+  const ua = navigator.userAgent || "";
+  const touch = /iPhone|iPod|Android/i.test(ua) ||
+    (/iPad/i.test(ua)) ||
+    false;
   if (touch) {
     try {
       if (navigator.canShare && navigator.canShare({ files })) {
