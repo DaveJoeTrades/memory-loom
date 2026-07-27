@@ -103,7 +103,7 @@ const UI_STR = {
     treeEyebrow: "为了家谱", woven: "由你的故事引出", fromFamily: "来自", photoQ: "关于这张照片", ownStory: "我自己有个故事", ownQ: "讲一个你心里想着的故事吧。", typeHere: "在这里写下故事……" }
 };
 const ACKS_ZH = ["这个值得留着。", "记下来就不会丢了。", "这段我还是头一回听。", "这样的事最容易失传。", "存好了。", "我喜欢这个。"];
-const APP_VERSION = "v3.5";
+const APP_VERSION = "v3.6";
 // ================= TESTED PURE LOGIC (mirrors logic.js, 46/46 pass) =================
 const NICKNAME_SETS = [
   ["william","bill","will","billy","liam"],["robert","bob","bobby","rob","robbie"],
@@ -864,13 +864,19 @@ async function journalChat(promptQ, pairs, lang, known, depth) {
 async function saveFilesSmart(files) {
   // Try the share sheet only where it is genuinely available; it throws outside a user
   // gesture, which is most of the time here since files are gathered asynchronously.
-  try {
-    if (navigator.canShare && navigator.canShare({ files })) {
-      await navigator.share({ files });
-      return { ok: true, how: "shared" };
+  // Only phones and tablets get the share sheet; on a desktop it swallows the file and
+  // a plain download is what the person actually wants.
+  const touch = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (touch) {
+    try {
+      if (navigator.canShare && navigator.canShare({ files })) {
+        await navigator.share({ files });
+        return { ok: true, how: "shared" };
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") return { ok: true, how: "cancelled" };
     }
-  } catch (e) {
-    if (e && e.name === "AbortError") return { ok: true, how: "cancelled" };
   }
   let saved = 0, lastErr = "";
   for (const f of files) {
@@ -911,6 +917,7 @@ async function generateSampleStories(n, lang, seedName, onProgress, bibleIn) {
   const spine = bible ? JSON.stringify(bible) : "(invent a consistent family and keep it consistent)";
   const chapters = ["beginnings", "home", "family", "kin", "love", "work", "places", "traditions", "hard-times", "witness", "joy", "wisdom"];
   const out = [];
+  let failures = 0;
   const PER = 2;                       // two per call keeps each reply well inside the token ceiling
   for (let k = 0; k < n; k += PER) {
     const count = Math.min(PER, n - k);
@@ -924,17 +931,20 @@ async function generateSampleStories(n, lang, seedName, onProgress, bibleIn) {
       'Use these chapters: ' + chapters[(k / PER) % chapters.length] + (count > 1 ? ", " + chapters[(k / PER + 1) % chapters.length] : "") + '.\n' +
       (lang === "zh" ? 'Write everything in natural Simplified Chinese.\n' : 'Write in plain English.\n') +
       'Reply ONLY with a JSON array: [{"chapter":"...","q":"the question that prompted it","t":"the story"}]';
-    const res = await callClaude(prompt, { maxTokens: 4000, timeoutMs: 120000 });
-    if (!res) break;
     let added = 0;
-    try {
-      const arr = JSON.parse(res.replace(/```json|```/g, "").trim());
-      if (Array.isArray(arr)) for (const x of arr) if (x && x.t && x.q) { out.push({ chapter: x.chapter || "open", q: x.q, t: x.t }); added++; }
-    } catch (e) { /* one bad batch should not sink the run */ }
-    if (onProgress) onProgress(out.length, n);
-    if (!added && out.length === 0) break;
+    for (let attempt = 0; attempt < 2 && added === 0; attempt++) {
+      const res = await callClaude(prompt, { maxTokens: 4000, timeoutMs: 120000 });
+      if (!res) { failures++; continue; }
+      try {
+        const arr = JSON.parse(res.replace(/```json|```/g, "").trim());
+        if (Array.isArray(arr)) for (const x of arr) if (x && x.t && x.q) { out.push({ chapter: x.chapter || "open", q: x.q, t: x.t }); added++; }
+      } catch (e) { failures++; }
+    }
+    if (onProgress) onProgress(out.length, n, failures);
+    // Only give up if nothing at all is coming back, not on a single bad batch.
+    if (!added && out.length === 0 && failures >= 3) break;
   }
-  return { stories: out, bible };
+  return { stories: out, bible, failures };
 }
 async function translateStory(text, toLang) {
   // A reading translation only. The original telling is never overwritten — it is the record.
@@ -1695,6 +1705,12 @@ function StoryFlow({ graph, mutateGraph, setIndexPersist, runExtraction, goFamil
     serveNext();
   }
   async function startTalking() { stopSpeak(); const ok = await rec.start(); if (ok) setPhase("live"); }
+  useEffect(() => {
+    if (phase !== "live" || typeof window === "undefined" || !window.__prefetchSpeech) return;
+    const ackArr = lang === "zh" ? ACKS_ZH : ACKS;
+    const warm = [ackArr[(ackIdx) % ackArr.length] + " " + t.filed, t.wonderful];
+    warm.forEach(line => { try { window.__prefetchSpeech(line); } catch (e) {} });
+  }, [phase]);
   async function stopTalking() {
     const { text, blob, heard } = await rec.stop();
     if (blob) blobsRef.current.push(blob);
@@ -2658,19 +2674,23 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
       const gen = { bible };
       mutateGraph(g => { g.stats.stories = (g.stats.stories || 0) + allMade; g.stats.minutes = (g.stats.minutes || 0) + allMade * 2.5; g.demoLoaded = true; });
       // Run the real extractor over them, so the tree and people are built the way they would be in life.
-      let readOk = 0, readFail = 0, lastErr = "";
-      for (let i = 0; i < ids.length; i++) {
-        setSeedMsg(ft("Reading story ") + (i + 1) + "/" + ids.length + ft(" into the ledger…"));
+      let readOk = 0, readFail = 0, lastErr = "", doneCount = 0;
+      const readOne = async (sid) => {
         try {
-          const st = await loadStory(ids[i]);
-          if (!st) { readFail++; lastErr = "story not found in storage"; continue; }
-          if (!st.transcript) { readFail++; lastErr = "story had no transcript"; continue; }
+          const st = await loadStory(sid);
+          if (!st) { readFail++; lastErr = "story not found in storage"; return; }
+          if (!st.transcript) { readFail++; lastErr = "story had no transcript"; return; }
           await runExtraction(st);
           readOk++;
         } catch (e) { readFail++; lastErr = String(e && e.message || e); }
+        finally { doneCount++; setSeedMsg(ft("Reading story ") + doneCount + "/" + ids.length + ft(" into the ledger…")); }
+      };
+      const LANES = 3;                                   // three at a time: much faster, still gentle
+      for (let i = 0; i < ids.length; i += LANES) {
+        await Promise.all(ids.slice(i, i + LANES).map(readOne));
       }
       if (readFail) setSeedMsg(readOk + " " + ft("read in") + " · " + readFail + " " + ft("could not be read") + " — " + lastErr);
-      setSeedMsg(made.length + " " + ft("stories written and read into the ledger.") +
+      setSeedMsg(allMade + "/" + seedN + " " + ft("stories written and read into the ledger.") +
         (gen && gen.bible && gen.bible.storyteller ? " " + ft("Family spine: ") + (gen.bible.people || []).length + ft(" relatives, ") + (gen.bible.timeline || []).length + ft(" dated events.") : ""));
     } catch (e) { setSeedMsg(ft("Sample failed: ") + String(e && e.message || e)); }
     finally { setSeedBusy(false); }
@@ -2782,6 +2802,9 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
       try { const bs = await window.__audioGet(id); if (bs) blobs.push(...bs); } catch (e) {}
     }
     for (const qid of Object.keys(graph.voicePack || {})) {
+      const rec2 = graph.voicePack[qid];
+      const by = (rec2 && rec2.by) || null;
+      if (by && by !== sp.id) continue;               // only this person's own recordings
       try { const bs = await window.__audioGet("qv:" + qid); if (bs) blobs.push(...bs); } catch (e) {}
     }
     return blobs;
@@ -2819,7 +2842,8 @@ function FamilyView({ graph, mutateGraph, index, setIndexPersist, runExtraction,
     setVpRec(null);
     if (!qid || !blob || typeof window === "undefined" || !window.__audioSave) return;
     try { window.__audioSave("qv:" + qid, [blob]); } catch (e) {}
-    mutateGraph(g => { g.voicePack = g.voicePack || {}; g.voicePack[qid] = true; });
+    const owner = (graph.settings && (graph.settings.currentSpeakerId || graph.settings.rootSpeakerId)) || "";
+    mutateGraph(g => { g.voicePack = g.voicePack || {}; g.voicePack[qid] = { by: owner, at: Date.now() }; });
   }
   const recFam = useRecorder({ lang: (graph.settings && graph.settings.lang) || "en" });
   const photoInRef = useRef(null);
