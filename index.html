@@ -227,7 +227,7 @@ if (!window.storage) {
       var ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:rgba(35,43,38,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
       var c=document.createElement('div');c.style.cssText='background:#FBF9F2;border-radius:14px;max-width:420px;width:100%;padding:22px;font-family:Georgia,serif;color:#232B26;';
       c.innerHTML='<h3 style="margin:0 0 6px;font-size:20px;">Your voice (ElevenLabs)</h3><p style="font-size:13.5px;color:#75806F;margin:0 0 14px;line-height:1.5;">Paste an ElevenLabs API key and a Voice ID and the questions will be spoken in that cloned voice. Leave blank to use the built-in voice. Stored only in this browser.</p>'
-        +'<label style="font-size:12px;color:#75806F;">ElevenLabs API key</label><input id="lv-k" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 10px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">'
+        +'<label style="font-size:12px;color:#75806F;">ElevenLabs API key</label><input id="lv-k" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore="true" style="width:100%;box-sizing:border-box;margin:4px 0 10px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;-webkit-text-security:disc;">'
         +'<label style="font-size:12px;color:#75806F;">Voice ID (leave empty to use the device voice)</label><input id="lv-v" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 14px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">'
         +'<label style="font-size:12px;color:#75806F;">Chinese Voice ID (optional — blank uses the same voice)</label><input id="lv-vzh" autocomplete="off" style="width:100%;box-sizing:border-box;margin:4px 0 14px;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;">'
         +'<h3 style="margin:14px 0 6px;font-size:17px;">Built-in voice</h3><label style="font-size:12px;color:#75806F;">English voice</label><div style="display:flex;gap:6px;margin:4px 0 10px;"><select id="lv-en" style="flex:1;box-sizing:border-box;padding:9px;border:1px solid #DDD6C4;border-radius:8px;background:#fff;"></select><button id="lv-en-p" type="button" style="padding:0 12px;border:1px solid #DDD6C4;border-radius:8px;background:#F1EEE4;cursor:pointer;font-size:15px;">&#9654;</button></div>'
@@ -409,7 +409,7 @@ const UI_STR = {
     treeEyebrow: "为了家谱", woven: "由你的故事引出", fromFamily: "来自", photoQ: "关于这张照片", ownStory: "我自己有个故事", ownQ: "讲一个你心里想着的故事吧。", typeHere: "在这里写下故事……" }
 };
 const ACKS_ZH = ["这个值得留着。", "记下来就不会丢了。", "这段我还是头一回听。", "这样的事最容易失传。", "存好了。", "我喜欢这个。"];
-const APP_VERSION = "v3.6";
+const APP_VERSION = "v3.7";
 // ================= TESTED PURE LOGIC (mirrors logic.js, 46/46 pass) =================
 const NICKNAME_SETS = [
   ["william","bill","will","billy","liam"],["robert","bob","bobby","rob","robbie"],
@@ -1177,8 +1177,12 @@ async function saveFilesSmart(files) {
   // gesture, which is most of the time here since files are gathered asynchronously.
   // Only phones and tablets get the share sheet; on a desktop it swallows the file and
   // a plain download is what the person actually wants.
-  const touch = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  // A Mac reports touch points for its trackpad, which wrongly pushed desktop saves into
+  // the share popover. Phones and tablets only.
+  const ua = navigator.userAgent || "";
+  const touch = /iPhone|iPod|Android/i.test(ua) ||
+    (/iPad/i.test(ua)) ||
+    false;
   if (touch) {
     try {
       if (navigator.canShare && navigator.canShare({ files })) {
